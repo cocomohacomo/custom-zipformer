@@ -78,6 +78,7 @@ def main() -> int:
             total[kind]["hyp"] += nh
         per_case.append({
             "case_id": row["case_id"], "category": row["category"],
+            "complete_omission": not row["hypothesis"].strip(),
             "char": {"substitutions": cs, "deletions": cd, "insertions": ci,
                      "reference_units": len(ref_chars), "cer": ratio(cs + cd + ci, len(ref_chars)),
                      "deletion_rate": ratio(cd, len(ref_chars))},
@@ -97,7 +98,18 @@ def main() -> int:
             "insertion_rate": ratio(v["ins"], v["ref"]),
             "substitution_rate": ratio(v["sub"], v["ref"]),
         }
-    output = {"case_count": len(rows), "summary": summary, "cases": per_case}
+    empty_hypothesis_count = sum(not row["hypothesis"].strip() for row in rows)
+    empty_reference_count = sum(not row["reference"].strip() for row in rows)
+    output = {
+        "case_count": len(rows),
+        "complete_omission": {
+            "empty_hypothesis_count": empty_hypothesis_count,
+            "empty_hypothesis_rate": ratio(empty_hypothesis_count, len(rows)),
+            "empty_reference_count": empty_reference_count,
+        },
+        "summary": summary,
+        "cases": per_case,
+    }
     rendered = json.dumps(output, ensure_ascii=False, indent=2)
     if args.output_json:
         args.output_json.write_text(rendered + chr(10), encoding="utf-8")
