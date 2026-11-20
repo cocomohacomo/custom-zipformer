@@ -6,7 +6,6 @@ import tempfile
 from pathlib import Path
 
 from scripts.deletion_metrics import main as metrics_main
-
 from scripts.deletion_metrics import edit_counts, ratio
 
 
@@ -38,26 +37,30 @@ class EditCountsTests(unittest.TestCase):
 
 
 class OmissionMetricsTests(unittest.TestCase):
-    def test_complete_omission_is_reported_separately(self):
+    def test_complete_near_complete_and_severe_deletion(self):
         with tempfile.TemporaryDirectory() as td:
             tsv = Path(td) / "transcripts.tsv"
             with tsv.open("w", encoding="utf-8", newline="") as f:
                 writer = csv.writer(f, delimiter="\t")
-                writer.writerow(["case_id", "category", "reference", "hypothesis"])
-                writer.writerow(["a", "short", "猫がいる", ""])
-                writer.writerow(["b", "short", "犬がいる", "犬いる"])
+                writer.writerow(["case_id", "category", "reference", "hypothesis",
+                                 "audio_duration_seconds", "audio_rms"])
+                writer.writerow(["a", "short", "猫がいる", "", "1.2", "0.02"])
+                writer.writerow(["b", "short", "犬がいる", "犬", "1.0", "0.03"])
+                writer.writerow(["c", "long", "今日は天気が良いです", "今日は天気", "3.0", "0.01"])
             out = Path(td) / "metrics.json"
-            previous = sys.argv
+            old = sys.argv
             try:
                 sys.argv = ["metrics", str(tsv), "--output-json", str(out)]
                 self.assertEqual(metrics_main(), 0)
             finally:
-                sys.argv = previous
+                sys.argv = old
             report = json.loads(out.read_text(encoding="utf-8"))
             self.assertEqual(report["complete_omission"]["empty_hypothesis_count"], 1)
-            self.assertEqual(report["complete_omission"]["empty_hypothesis_rate"], 0.5)
-            self.assertTrue(report["cases"][0]["complete_omission"])
-            self.assertFalse(report["cases"][1]["complete_omission"])
+            self.assertEqual(report["near_complete_omission"]["count"], 1)
+            self.assertEqual(report["severe_deletion"]["count"], 2)
+            self.assertEqual(report["category_summary"]["short"]["case_count"], 2)
+            self.assertEqual(report["cases"][1]["audio_duration_seconds"], 1.0)
+            self.assertIn("not WER", report["whitespace_token_diagnostic"]["warning"].lower())
 
 
 
