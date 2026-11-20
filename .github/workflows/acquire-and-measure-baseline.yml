@@ -139,7 +139,7 @@ jobs:
       - name: Validate metrics report
         run: |
           python - <<'PY'
-          import json
+          import csv, json
           from pathlib import Path
           root = Path("tests/data/common_voice_ja")
           report = json.loads((root / "baseline_metrics.json").read_text(encoding="utf-8"))
@@ -153,14 +153,16 @@ jobs:
                   raise SystemExit(f"Required omission metric is missing: {section}.{field}")
           if "category_summary" not in report or "char" not in report.get("summary", {}):
               raise SystemExit("Character and category summaries are required.")
+          with (root / "transcripts.tsv").open(encoding="utf-8", newline="") as f:
+              raw_rows = list(csv.DictReader(f, delimiter="\t"))
           normalized = json.loads((root / "normalized_metrics.json").read_text(encoding="utf-8"))
           with (root / "transcripts_rms_normalized.tsv").open(encoding="utf-8", newline="") as f:
-              normalized_rows = list(csv.DictReader(f, delimiter="\\t"))
+              normalized_rows = list(csv.DictReader(f, delimiter="\t"))
           if normalized.get("case_count") != len(manifest["manifest"]) or len(normalized_rows) != len(manifest["manifest"]):
               raise SystemExit("Normalized comparison does not contain exactly one result per input clip.")
           if [r["case_id"] for r in normalized_rows] != [r["case_id"] for r in raw_rows]:
               raise SystemExit("Raw and normalized inference case order differs.")
-          if "applied_gain_db" not in normalized_rows[0] or "inference_audio_rms" not in normalized_rows[0]:
+          if not normalized_rows or "applied_gain_db" not in normalized_rows[0] or "inference_audio_rms" not in normalized_rows[0]:
               raise SystemExit("Normalization diagnostics are missing.")
           print(f"Validated raw and RMS-normalized metrics for {report['case_count']} clips.")
           PY
