@@ -1,25 +1,44 @@
 # Automated Japanese Zipformer baseline
 
-## One-time repository setup
+## One-time setup
 
-Add the repository Actions secret `COMMON_VOICE_ARCHIVE_URL`. Its value must be a direct, authorized download URL for the Common Voice Scripted Speech 27.0 Japanese archive (ZIP or TAR) that contains `test.tsv` and `clips/`. Obtain it through Mozilla Data Collective after accepting the dataset terms. Do not commit the URL, credentials, corpus, or audio files.
+1. Open the Common Voice Scripted Speech 27.0 Japanese dataset in Mozilla Data Collective:
+   https://mozilladatacollective.com/datasets/cmu5xbhnf00fmnq07z9p3aa70
+2. Accept the dataset terms while signed in to the Mozilla Data Collective account associated with the API token.
+3. Store a valid token as the repository Actions secret `MOZILLA_DATA_COLLECTIVE_TOKEN`. Never commit or paste the token into workflow files or logs.
+
+The workflow uses the dataset ID `cmu5xbhnf00fmnq07z9p3aa70` and the official `datacollective` Python client. It does not use a manually supplied archive URL.
 
 ## Run
 
-Open **Actions → acquire-and-measure-japanese-baseline → Run workflow** and choose a sample limit (default 100). The workflow downloads the public sherpa-onnx Japanese Zipformer ReazonSpeech comparison model, prepares a deterministic sample, runs inference, computes CER and deletion rates, and uploads the result bundle as a 30-day artifact.
+Open **Actions → acquire-and-measure-japanese-baseline → Run workflow** and choose a sample limit (default 100). The workflow downloads the authorized corpus, selects a deterministic subset of the `test` split, downloads the public sherpa-onnx Japanese Zipformer ReazonSpeech comparison model, runs offline inference, computes deletion-focused metrics, and uploads the result bundle as a 30-day artifact.
 
-A push touching this workflow or its inference scripts also starts the workflow. If the dataset secret is absent, it intentionally fails before downloading anything.
+A push touching the workflow or its baseline scripts also triggers the workflow. This is intentional for continuous verification, but it means code changes can start a data download and inference run.
+
+## Validation gates
+
+The workflow fails if:
+- the repository secret is missing or the MDC account has not accepted the dataset terms;
+- the extracted dataset has no `test.tsv` or `clips/` directory;
+- any selected audio file is missing;
+- the prepared manifest is empty, inconsistent, or larger than the requested sample limit;
+- any required model file (`encoder*.onnx`, `decoder*.onnx`, `joiner*.onnx`, `tokens.txt`) is absent;
+- inference does not produce exactly one TSV row per prepared clip;
+- the metrics case count differs from the manifest or the complete-omission metric is absent.
+
+An empty hypothesis is not itself treated as an inference failure. It is a valid observation and is counted separately as a complete omission.
 
 ## Outputs
-
-The metrics report includes a separate `complete_omission` section (`empty_hypothesis_count` and `empty_hypothesis_rate`) so clips with entirely empty model output are tracked independently from character deletion rate. Each case also carries a `complete_omission` boolean. The workflow uploads both the JSON report and its stdout copy.
 
 - `manifest.json`: sample metadata and per-audio SHA-256.
 - `transcripts.tsv`: reference and actual model hypothesis for every decoded clip.
 - `baseline_metrics.json`: aggregate and per-clip CER, substitutions, deletions, insertions, and deletion rates.
+- `metrics.stdout.json`: stdout copy of the metrics report.
 
-The model is a public third-party comparison model, not this repository's custom Zipformer. This scripted-read-speech result does not establish spontaneous-speech or streaming performance. The existing whitespace-token WER is only a rough diagnostic for Japanese, not a linguistic word-level metric.
+The metrics include `complete_omission.empty_hypothesis_count` and `empty_hypothesis_rate`; each case also carries a `complete_omission` boolean.
 
-## Runtime assumptions
+## Interpretation limits
 
-The adapter expects sherpa-onnx's offline transducer model files named `encoder*.onnx`, `decoder*.onnx`, `joiner*.onnx`, and `tokens.txt`, recursively under the extracted model directory. It resamples input audio to 16 kHz and averages multichannel audio to mono.
+The model is a public third-party comparison model, not this repository's custom Zipformer. This scripted-read-speech result does not establish spontaneous-speech or streaming performance. The whitespace-token WER is only a rough diagnostic for Japanese, not a linguistic word-level metric. CER and deletion rates are calculated on raw characters; any future normalization policy must be recorded and applied identically to all runs.
+
+The workflow does not claim a baseline until the full run completes and the artifact is available.
