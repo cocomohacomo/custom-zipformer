@@ -15,9 +15,17 @@ def main() -> int:
     p.add_argument("--output-tsv", type=Path, required=True)
     p.add_argument("--threads", type=int, default=2)
     p.add_argument("--timeout", type=float, default=180)
+    p.add_argument("--normalize-rms-dbfs", type=float, default=None,
+                   help="Optionally amplify low-RMS audio toward this RMS dBFS target; no attenuation is applied")
+    p.add_argument("--max-gain-db", type=float, default=12.0,
+                   help="Maximum gain for optional RMS normalization (default: 12 dB)")
     args = p.parse_args()
     if args.threads < 1:
         p.error("--threads must be >= 1")
+    if args.max_gain_db < 0:
+        p.error("--max-gain-db must be >= 0")
+    if args.normalize_rms_dbfs is not None and not -90 <= args.normalize_rms_dbfs <= 0:
+        p.error("--normalize-rms-dbfs must be between -90 and 0 dBFS")
 
     try:
         import numpy as np
@@ -55,7 +63,7 @@ def main() -> int:
         "case_id", "category", "reference", "hypothesis",
         "audio_duration_seconds", "audio_rms", "audio_peak",
         "near_silence_fraction", "clipping_fraction",
-        "source_sample_rate", "source_channels",
+        "source_sample_rate", "source_channels", "applied_gain_db", "inference_audio_rms",
     ]
     args.output_tsv.parent.mkdir(parents=True, exist_ok=True)
     with args.output_tsv.open("w", encoding="utf-8", newline="") as f:
@@ -75,6 +83,14 @@ def main() -> int:
             peak = float(np.max(np.abs(mono)))
             near_silence = float(np.mean(np.abs(mono) < 1e-4))
             clipping = float(np.mean(np.abs(mono) >= 0.999))
+            gain = 1.0
+            if args.normalize_rms_dbfs is not None and rms > 0:
+                target_rms = 10.0 ** (args.normalize_rms_dbfs / 20.0)
+                if rms < target_rms:
+                    gain = min(10.0 ** (args.max_gain_db / 20.0), target_rms / rms)
+                    gain = min(gain, 0.95 / peak) if peak > 0 else gain
+                    mono = mono * np.float32(gain)
+            inference_rms = float(np.sqrt(np.mean(np.square(mono, dtype=np.float64))))
             if sr != 16000:
                 from math import gcd
                 g = gcd(int(sr), 16000)
@@ -92,8 +108,12 @@ def main() -> int:
                 "near_silence_fraction": f"{near_silence:.6f}",
                 "clipping_fraction": f"{clipping:.6f}",
                 "source_sample_rate": int(sr), "source_channels": channels,
+                "applied_gain_db": f"{20.0 * np.log10(gain):.4f}",
+                "inference_audio_rms": f"{inference_rms:.8f}",
             })
     print(json.dumps({"decoded": len(entries), "output_tsv": str(args.output_tsv),
+                      "normalization": {"target_rms_dbfs": args.normalize_rms_dbfs,
+                                        "max_gain_db": args.max_gain_db if args.normalize_rms_dbfs is not None else 0},
                       "diagnostics": fields[4:]}, ensure_ascii=False))
     return 0
 
