@@ -121,7 +121,13 @@ jobs:
           actual_ids = [row["case_id"] for row in rows]
           if actual_ids != expected_ids:
               raise SystemExit(f"Inference output mismatch: expected {len(expected_ids)} rows, got {len(actual_ids)}.")
-          print(f"Verified inference output for all {len(rows)} clips.")
+          diagnostic_fields = {"audio_duration_seconds", "audio_rms", "audio_peak",
+                               "near_silence_fraction", "clipping_fraction",
+                               "source_sample_rate", "source_channels"}
+          missing_fields = diagnostic_fields - set(rows[0].keys()) if rows else diagnostic_fields
+          if missing_fields:
+              raise SystemExit(f"Inference diagnostics missing TSV columns: {sorted(missing_fields)}")
+          print(f"Verified inference output and signal diagnostics for all {len(rows)} clips.")
           PY
       - name: Calculate deletion-focused metrics
         run: |
@@ -136,9 +142,14 @@ jobs:
           manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
           if report.get("case_count") != len(manifest["manifest"]):
               raise SystemExit("Metrics case_count does not match the prepared sample.")
-          if "empty_hypothesis_rate" not in report.get("complete_omission", {}):
-              raise SystemExit("Complete-omission metric is missing.")
-          print(f"Validated metrics for {report['case_count']} clips.")
+          for section, field in (("complete_omission", "empty_hypothesis_rate"),
+                                 ("near_complete_omission", "rate"),
+                                 ("severe_deletion", "rate")):
+              if field not in report.get(section, {}):
+                  raise SystemExit(f"Required omission metric is missing: {section}.{field}")
+          if "category_summary" not in report or "char" not in report.get("summary", {}):
+              raise SystemExit("Character and category summaries are required.")
+          print(f"Validated expanded omission metrics for {report['case_count']} clips.")
           PY
       - name: Save baseline artifacts
         if: always()
