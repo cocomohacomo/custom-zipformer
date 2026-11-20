@@ -53,7 +53,7 @@ def main() -> int:
 
     rows = []
     with args.input_tsv.open(encoding="utf-8-sig", newline="") as f:
-        reader = csv.DictReader(f, delimiter="\\t")
+        reader = csv.DictReader(f, delimiter=chr(9))
         required = {"case_id", "category", "reference", "hypothesis"}
         if not reader.fieldnames or not required.issubset(reader.fieldnames):
             raise SystemExit("TSV header must contain: case_id, category, reference, hypothesis")
@@ -100,7 +100,7 @@ def main() -> int:
     output = {"case_count": len(rows), "summary": summary, "cases": per_case}
     rendered = json.dumps(output, ensure_ascii=False, indent=2)
     if args.output_json:
-        args.output_json.write_text(rendered + "\\n", encoding="utf-8")
+        args.output_json.write_text(rendered + chr(10), encoding="utf-8")
     print(rendered)
     return 0
 
