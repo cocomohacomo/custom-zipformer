@@ -76,6 +76,23 @@ jobs:
         run: |
           CORPUS_ROOT="$(dirname "$(find downloads/mdc -name test.tsv -print -quit)")"
           python scripts/prepare_common_voice_baseline.py "$CORPUS_ROOT" --split test --limit "$SAMPLE_LIMIT" --seed 270021 --output tests/data/common_voice_ja
+      - name: Validate prepared sample
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          root = Path("tests/data/common_voice_ja")
+          data = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
+          rows = data.get("manifest", [])
+          if not rows or data.get("copied") != len(rows):
+              raise SystemExit("Prepared manifest is empty or copied count is inconsistent.")
+          if len(rows) > int(os.environ["SAMPLE_LIMIT"]):
+              raise SystemExit("Prepared sample exceeds SAMPLE_LIMIT.")
+          missing = [item["audio"] for item in rows if not (root / item["audio"]).is_file()]
+          if missing:
+              raise SystemExit(f"Prepared audio files are missing: {missing[:5]}")
+          print(f"Prepared {len(rows)} verified clips (requested maximum: {data['requested']}).")
+          PY
       - name: Download public Japanese Zipformer comparison model
         run: |
           mkdir -p downloads models/zipformer-ja
@@ -83,12 +100,46 @@ jobs:
           curl --fail --location --retry 3 "$MODEL_URL" -o downloads/zipformer-ja.tar.bz2
           tar -xjf downloads/zipformer-ja.tar.bz2 -C models/zipformer-ja
           find models/zipformer-ja -type f \( -name 'encoder*.onnx' -o -name 'decoder*.onnx' -o -name 'joiner*.onnx' -o -name 'tokens.txt' \) -print
+      - name: Validate downloaded model files
+        run: |
+          for pattern in 'encoder*.onnx' 'decoder*.onnx' 'joiner*.onnx' 'tokens.txt'; do
+            find models/zipformer-ja -type f -name "$pattern" -print -quit | grep -q . || { echo "::error::Missing model file matching $pattern"; exit 1; }
+          done
       - name: Run Japanese Zipformer inference
         run: |
           python scripts/run_sherpa_zipformer.py tests/data/common_voice_ja/manifest.json --model-dir models/zipformer-ja --threads 2 --output-tsv tests/data/common_voice_ja/transcripts.tsv
+      - name: Validate inference output
+        run: |
+          python - <<'PY'
+          import csv, json
+          from pathlib import Path
+          root = Path("tests/data/common_voice_ja")
+          expected = json.loads((root / "manifest.json").read_text(encoding="utf-8"))["manifest"]
+          with (root / "transcripts.tsv").open(encoding="utf-8", newline="") as f:
+              rows = list(csv.DictReader(f, delimiter="\\t"))
+          expected_ids = [item["case_id"] for item in expected]
+          actual_ids = [row["case_id"] for row in rows]
+          if actual_ids != expected_ids:
+              raise SystemExit(f"Inference output mismatch: expected {len(expected_ids)} rows, got {len(actual_ids)}.")
+          print(f"Verified inference output for all {len(rows)} clips.")
+          PY
       - name: Calculate deletion-focused metrics
         run: |
           python scripts/deletion_metrics.py tests/data/common_voice_ja/transcripts.tsv --output-json tests/data/common_voice_ja/baseline_metrics.json > tests/data/common_voice_ja/metrics.stdout.json
+      - name: Validate metrics report
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root = Path("tests/data/common_voice_ja")
+          report = json.loads((root / "baseline_metrics.json").read_text(encoding="utf-8"))
+          manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
+          if report.get("case_count") != len(manifest["manifest"]):
+              raise SystemExit("Metrics case_count does not match the prepared sample.")
+          if "empty_hypothesis_rate" not in report.get("complete_omission", {}):
+              raise SystemExit("Complete-omission metric is missing.")
+          print(f"Validated metrics for {report['case_count']} clips.")
+          PY
       - name: Save baseline artifacts
         if: always()
         uses: actions/upload-artifact@v4
