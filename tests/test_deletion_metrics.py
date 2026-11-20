@@ -60,7 +60,7 @@ class OmissionMetricsTests(unittest.TestCase):
             self.assertEqual(report["severe_deletion"]["count"], 3)
             self.assertEqual(report["category_summary"]["short"]["case_count"], 2)
             self.assertEqual(report["cases"][1]["audio_duration_seconds"], 1.0)
-            self.assertIn("not WER", report["whitespace_token_diagnostic"]["warning"].lower())
+            self.assertIn("not wer", report["whitespace_token_diagnostic"]["warning"].lower())
 
 
 
