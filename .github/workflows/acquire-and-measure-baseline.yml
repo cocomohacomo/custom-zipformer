@@ -85,7 +85,7 @@ jobs:
           find models/zipformer-ja -type f \( -name 'encoder*.onnx' -o -name 'decoder*.onnx' -o -name 'joiner*.onnx' -o -name 'tokens.txt' \) -print
       - name: Run Japanese Zipformer inference
         run: |
-          python scripts/run_sherpa_zipformer.py tests/data/common_voice_ja/manifest.json --model-dir models/zipformer-ja --threads 2 --output-tsv tests/data/common_voice_ja/transcripts.tsv
+          python scripts/run_sherpa_zipformer.py tests/data/common_voice_ja/manifest.json --model-dir models/zipformer-ja --threads 2 --output-tsv tests/data/common_voice_ja/transcripts.tsv --timeout 180
       - name: Calculate deletion-focused metrics
         run: |
           python scripts/deletion_metrics.py tests/data/common_voice_ja/transcripts.tsv --output-json tests/data/common_voice_ja/baseline_metrics.json > tests/data/common_voice_ja/metrics.stdout.json
@@ -98,5 +98,6 @@ jobs:
             tests/data/common_voice_ja/manifest.json
             tests/data/common_voice_ja/transcripts.tsv
             tests/data/common_voice_ja/baseline_metrics.json
+            tests/data/common_voice_ja/metrics.stdout.json
           if-no-files-found: warn
           retention-days: 30
