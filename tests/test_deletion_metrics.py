@@ -42,7 +42,7 @@ class OmissionMetricsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             tsv = Path(td) / "transcripts.tsv"
             with tsv.open("w", encoding="utf-8", newline="") as f:
-                writer = csv.writer(f, delimiter="\\t")
+                writer = csv.writer(f, delimiter="\t")
                 writer.writerow(["case_id", "category", "reference", "hypothesis"])
                 writer.writerow(["a", "short", "猫がいる", ""])
                 writer.writerow(["b", "short", "犬がいる", "犬いる"])
