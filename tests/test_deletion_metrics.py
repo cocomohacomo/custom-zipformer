@@ -50,14 +50,14 @@ class OmissionMetricsTests(unittest.TestCase):
             out = Path(td) / "metrics.json"
             old = sys.argv
             try:
-                sys.argv = ["metrics", str(tsv), "--output-json", str(out)]
+                sys.argv = ["metrics", str(tsv), "--output-json", str(out), "--near-complete-ratio", "0.30"]
                 self.assertEqual(metrics_main(), 0)
             finally:
                 sys.argv = old
             report = json.loads(out.read_text(encoding="utf-8"))
             self.assertEqual(report["complete_omission"]["empty_hypothesis_count"], 1)
             self.assertEqual(report["near_complete_omission"]["count"], 1)
-            self.assertEqual(report["severe_deletion"]["count"], 2)
+            self.assertEqual(report["severe_deletion"]["count"], 3)
             self.assertEqual(report["category_summary"]["short"]["case_count"], 2)
             self.assertEqual(report["cases"][1]["audio_duration_seconds"], 1.0)
             self.assertIn("not WER", report["whitespace_token_diagnostic"]["warning"].lower())
