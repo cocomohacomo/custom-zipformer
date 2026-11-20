@@ -27,53 +27,60 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 180
     env:
-      COMMON_VOICE_ARCHIVE_URL: ${{ secrets.COMMON_VOICE_ARCHIVE_URL }}
+      MDC_API_KEY: ${{ secrets.MOZILLA_DATA_COLLECTIVE_TOKEN }}
+      MDC_DOWNLOAD_PATH: ${{ github.workspace }}/downloads/mdc
       SAMPLE_LIMIT: ${{ inputs.sample_limit || '100' }}
+      COMMON_VOICE_JA_DATASET_ID: cmu5xbhnf00fmnq07z9p3aa70
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Validate dataset access
+      - name: Validate Mozilla Data Collective credentials
+        env:
+          MDC_API_KEY: ${{ secrets.MOZILLA_DATA_COLLECTIVE_TOKEN }}
         run: |
-          if [ -z "$COMMON_VOICE_ARCHIVE_URL" ]; then
-            echo "::error::Set repository Actions secret COMMON_VOICE_ARCHIVE_URL to an authorized Common Voice 27.0 Japanese archive download URL."
+          if [ -z "$MDC_API_KEY" ]; then
+            echo "::error::Missing repository secret MOZILLA_DATA_COLLECTIVE_TOKEN."
             exit 2
           fi
-      - name: Install inference runtime
-        run: python -m pip install --upgrade pip sherpa-onnx soundfile scipy numpy
-      - name: Download Common Voice Japanese archive
+          echo "Mozilla Data Collective credential is configured (value is not displayed)."
+      - name: Install dataset client and inference runtime
+        run: python -m pip install --upgrade pip datacollective sherpa-onnx soundfile scipy numpy
+      - name: Download Common Voice Japanese through MDC API
         run: |
-          mkdir -p downloads corpus
-          curl --fail --location --retry 3 --retry-delay 5 "$COMMON_VOICE_ARCHIVE_URL" -o downloads/common-voice-ja.tar
-          file downloads/common-voice-ja.tar
-      - name: Extract Common Voice archive
+          mkdir -p "$MDC_DOWNLOAD_PATH" corpus
+          python - <<'PY'
+          import os
+          from datacollective import download_dataset
+          dataset_id = os.environ["COMMON_VOICE_JA_DATASET_ID"]
+          print(f"Requesting authorized Common Voice dataset: {dataset_id}")
+          path = download_dataset(dataset_id, download_directory=os.environ["MDC_DOWNLOAD_PATH"], extract=True, show_progress=False, enable_logging=False)
+          print(f"Dataset downloaded and extracted to: {path}")
+          PY
+      - name: Locate extracted dataset
         run: |
           python - <<'PY'
-          import tarfile, zipfile
           from pathlib import Path
-          src = Path("downloads/common-voice-ja.tar")
-          dst = Path("corpus")
-          if zipfile.is_zipfile(src):
-              with zipfile.ZipFile(src) as z: z.extractall(dst)
-          elif tarfile.is_tarfile(src):
-              with tarfile.open(src) as t: t.extractall(dst, filter="data")
-          else:
-              raise SystemExit("Unsupported archive. Provide a ZIP or TAR archive.")
-          matches = list(dst.rglob("test.tsv"))
-          if not matches:
-              raise SystemExit("Could not locate test.tsv in extracted archive")
-          print("Corpus root:", matches[0].parent)
+          root = Path("downloads/mdc")
+          candidates = list(root.rglob("test.tsv"))
+          if not candidates:
+              raise SystemExit("MDC download succeeded but no test.tsv was found in extracted dataset.")
+          corpus_root = candidates[0].parent
+          clips = corpus_root / "clips"
+          if not clips.is_dir():
+              raise SystemExit(f"Dataset metadata found but clips directory is missing: {clips}")
+          print(f"Common Voice corpus root: {corpus_root}")
           PY
       - name: Prepare deterministic sample
         run: |
-          CORPUS_ROOT="$(dirname "$(find corpus -name test.tsv -print -quit)")"
+          CORPUS_ROOT="$(dirname "$(find downloads/mdc -name test.tsv -print -quit)")"
           python scripts/prepare_common_voice_baseline.py "$CORPUS_ROOT" --split test --limit "$SAMPLE_LIMIT" --seed 270021 --output tests/data/common_voice_ja
       - name: Download public Japanese Zipformer comparison model
         run: |
+          mkdir -p downloads models/zipformer-ja
           MODEL_URL="https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-zipformer-ja-reazonspeech-2024-08-01.tar.bz2"
           curl --fail --location --retry 3 "$MODEL_URL" -o downloads/zipformer-ja.tar.bz2
-          mkdir -p models/zipformer-ja
           tar -xjf downloads/zipformer-ja.tar.bz2 -C models/zipformer-ja
           find models/zipformer-ja -type f \( -name 'encoder*.onnx' -o -name 'decoder*.onnx' -o -name 'joiner*.onnx' -o -name 'tokens.txt' \) -print
       - name: Run Japanese Zipformer inference
