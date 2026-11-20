@@ -1,0 +1,96 @@
+name: acquire-and-measure-japanese-baseline
+
+on:
+  workflow_dispatch:
+    inputs:
+      sample_limit:
+        description: Number of Common Voice test clips
+        required: true
+        default: "100"
+        type: string
+  push:
+    paths:
+      - ".github/workflows/acquire-and-measure-baseline.yml"
+      - "scripts/run_sherpa_zipformer.py"
+      - "scripts/prepare_common_voice_baseline.py"
+      - "scripts/deletion_metrics.py"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: japanese-asr-baseline
+  cancel-in-progress: false
+
+jobs:
+  baseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      COMMON_VOICE_ARCHIVE_URL: ${{ secrets.COMMON_VOICE_ARCHIVE_URL }}
+      SAMPLE_LIMIT: ${{ inputs.sample_limit || '100' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Validate dataset access
+        run: |
+          if [ -z "$COMMON_VOICE_ARCHIVE_URL" ]; then
+            echo "::error::Set repository Actions secret COMMON_VOICE_ARCHIVE_URL to an authorized Common Voice 27.0 Japanese archive download URL."
+            exit 2
+          fi
+      - name: Install inference runtime
+        run: python -m pip install --upgrade pip sherpa-onnx soundfile scipy numpy
+      - name: Download Common Voice Japanese archive
+        run: |
+          mkdir -p downloads corpus
+          curl --fail --location --retry 3 --retry-delay 5 "$COMMON_VOICE_ARCHIVE_URL" -o downloads/common-voice-ja.tar
+          file downloads/common-voice-ja.tar
+      - name: Extract Common Voice archive
+        run: |
+          python - <<'PY'
+          import tarfile, zipfile
+          from pathlib import Path
+          src = Path("downloads/common-voice-ja.tar")
+          dst = Path("corpus")
+          if zipfile.is_zipfile(src):
+              with zipfile.ZipFile(src) as z: z.extractall(dst)
+          elif tarfile.is_tarfile(src):
+              with tarfile.open(src) as t: t.extractall(dst, filter="data")
+          else:
+              raise SystemExit("Unsupported archive. Provide a ZIP or TAR archive.")
+          matches = list(dst.rglob("test.tsv"))
+          if not matches:
+              raise SystemExit("Could not locate test.tsv in extracted archive")
+          print("Corpus root:", matches[0].parent)
+          PY
+      - name: Prepare deterministic sample
+        run: |
+          CORPUS_ROOT="$(dirname "$(find corpus -name test.tsv -print -quit)")"
+          python scripts/prepare_common_voice_baseline.py "$CORPUS_ROOT" --split test --limit "$SAMPLE_LIMIT" --seed 270021 --output tests/data/common_voice_ja
+      - name: Download public Japanese Zipformer comparison model
+        run: |
+          MODEL_URL="https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-zipformer-ja-reazonspeech-2024-08-01.tar.bz2"
+          curl --fail --location --retry 3 "$MODEL_URL" -o downloads/zipformer-ja.tar.bz2
+          mkdir -p models/zipformer-ja
+          tar -xjf downloads/zipformer-ja.tar.bz2 -C models/zipformer-ja
+          find models/zipformer-ja -type f \( -name 'encoder*.onnx' -o -name 'decoder*.onnx' -o -name 'joiner*.onnx' -o -name 'tokens.txt' \) -print
+      - name: Run Japanese Zipformer inference
+        run: |
+          python scripts/run_sherpa_zipformer.py tests/data/common_voice_ja/manifest.json --model-dir models/zipformer-ja --threads 2 --output-tsv tests/data/common_voice_ja/transcripts.tsv
+      - name: Calculate deletion-focused metrics
+        run: |
+          python scripts/deletion_metrics.py tests/data/common_voice_ja/transcripts.tsv --output-json tests/data/common_voice_ja/baseline_metrics.json > tests/data/common_voice_ja/metrics.stdout.json
+      - name: Save baseline artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: japanese-zipformer-baseline-${{ github.run_id }}
+          path: |
+            tests/data/common_voice_ja/manifest.json
+            tests/data/common_voice_ja/transcripts.tsv
+            tests/data/common_voice_ja/baseline_metrics.json
+          if-no-files-found: warn
+          retention-days: 30
