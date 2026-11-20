@@ -12,6 +12,8 @@ A push touching this workflow or its inference scripts also starts the workflow.
 
 ## Outputs
 
+The metrics report includes a separate `complete_omission` section (`empty_hypothesis_count` and `empty_hypothesis_rate`) so clips with entirely empty model output are tracked independently from character deletion rate. Each case also carries a `complete_omission` boolean. The workflow uploads both the JSON report and its stdout copy.
+
 - `manifest.json`: sample metadata and per-audio SHA-256.
 - `transcripts.tsv`: reference and actual model hypothesis for every decoded clip.
 - `baseline_metrics.json`: aggregate and per-clip CER, substitutions, deletions, insertions, and deletion rates.
