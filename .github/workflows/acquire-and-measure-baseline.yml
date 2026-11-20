@@ -116,7 +116,7 @@ jobs:
           root = Path("tests/data/common_voice_ja")
           expected = json.loads((root / "manifest.json").read_text(encoding="utf-8"))["manifest"]
           with (root / "transcripts.tsv").open(encoding="utf-8", newline="") as f:
-              rows = list(csv.DictReader(f, delimiter="\\t"))
+              rows = list(csv.DictReader(f, delimiter="\t"))
           expected_ids = [item["case_id"] for item in expected]
           actual_ids = [row["case_id"] for row in rows]
           if actual_ids != expected_ids:
