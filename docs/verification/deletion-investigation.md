@@ -72,3 +72,12 @@ This repository is the testbed for investigating and reducing ASR deletions (aud
 - Regressions:
 - Interpretation:
 - Next step:
+
+
+## Next-stage implementation status (2026-11-21)
+
+- Added regression tests for exact match, Japanese particle deletion, insertion, substitution, empty hypothesis, empty reference, and zero-denominator ratio handling.
+- Added `docs/verification/inference-trace-contract.md` defining run metadata, chunk accounting, optional token-level traces, privacy defaults, and evidence rules for stage attribution.
+- The repository code-search lookup did not identify the concrete inference entry point in this pass. Do not add speculative hooks to an assumed sherpa-onnx API; first map the checked-out source tree and identify the actual recognizer/session/chunk path.
+- Execution status: GitHub commits succeeded. The test suite has been authored but has **not** been executed in the target repository/runtime in this session. No audio baseline or model benchmark has been run.
+- Immediate next action: run `python -m unittest tests.test_deletion_metrics` from the repository root; then add integration instrumentation at the real audio-ingest, VAD, encoder, Joiner, decoder, and postprocessing boundaries.
