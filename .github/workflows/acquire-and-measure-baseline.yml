@@ -158,7 +158,7 @@ jobs:
               normalized_rows = list(csv.DictReader(f, delimiter="\\t"))
           if normalized.get("case_count") != len(manifest["manifest"]) or len(normalized_rows) != len(manifest["manifest"]):
               raise SystemExit("Normalized comparison does not contain exactly one result per input clip.")
-          if [r["case_id"] for r in normalized_rows] != [r["case_id"] for r in rows]:
+          if [r["case_id"] for r in normalized_rows] != [r["case_id"] for r in raw_rows]:
               raise SystemExit("Raw and normalized inference case order differs.")
           if "applied_gain_db" not in normalized_rows[0] or "inference_audio_rms" not in normalized_rows[0]:
               raise SystemExit("Normalization diagnostics are missing.")
