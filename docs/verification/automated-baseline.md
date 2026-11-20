@@ -42,3 +42,16 @@ The metrics include `complete_omission.empty_hypothesis_count` and `empty_hypoth
 The model is a public third-party comparison model, not this repository's custom Zipformer. This scripted-read-speech result does not establish spontaneous-speech or streaming performance. The whitespace-token WER is only a rough diagnostic for Japanese, not a linguistic word-level metric. CER and deletion rates are calculated on raw characters; any future normalization policy must be recorded and applied identically to all runs.
 
 The workflow does not claim a baseline until the full run completes and the artifact is available.
+
+
+## Extended omission and signal diagnostics
+
+The inference TSV records each clip's duration, source sample rate/channel count, RMS level, peak level, near-silence fraction, and clipping fraction. These are screening signals, not proof of a causal failure.
+
+The metrics report also separates:
+- complete omissions: empty hypothesis;
+- near-complete omissions: non-empty hypothesis with at most 10% as many characters as the reference;
+- severe deletion cases: character deletion rate of at least 50%;
+- category-level CER and deletion rate for short, medium, and long references.
+
+Japanese WER is not reported. The previous whitespace-split score is retained only as a clearly labeled diagnostic because Japanese text generally has no spaces between words. CER remains raw Unicode-code-point CER with no normalization; punctuation, width, and script normalization are not silently applied.
