@@ -81,3 +81,13 @@ This repository is the testbed for investigating and reducing ASR deletions (aud
 - The repository code-search lookup did not identify the concrete inference entry point in this pass. Do not add speculative hooks to an assumed sherpa-onnx API; first map the checked-out source tree and identify the actual recognizer/session/chunk path.
 - Execution status: GitHub commits succeeded. The test suite has been authored but has **not** been executed in the target repository/runtime in this session. No audio baseline or model benchmark has been run.
 - Immediate next action: run `python -m unittest tests.test_deletion_metrics` from the repository root; then add integration instrumentation at the real audio-ingest, VAD, encoder, Joiner, decoder, and postprocessing boundaries.
+
+
+## Common Voice baseline acquisition update (2026-11-21)
+
+- Selected Mozilla Common Voice Scripted Speech 27.0 Japanese, dataset ID `cmu5xbhnf00fmnq07z9p3aa70`, CC0-1.0. Dataset page reports 14.36 GB; the test subset should be downloaded through the official portal and kept local.
+- Added a deterministic local subset preparation script. Default selection is 100 clips from the official test split, stratified by transcript character length with a fixed seed. Audio and manifest are excluded from Git.
+- Added a generic per-clip ASR command runner. It requires the real recognizer CLI to be supplied; stdout is captured as the hypothesis.
+- Repository inspection found no checked-in inference implementation, model files, or recognizer CLI (the root currently contains README, LICENSE, docs, scripts, tests, and .gitignore). Therefore model execution cannot yet be wired or measured from this repository alone.
+- No dataset audio was downloaded, no audio files were committed, and no CER/WER/deletion baseline values are claimed. The user/local environment must acquire the portal dataset and provide the inference command/model.
+- Next: validate both scripts with a small synthetic Common Voice-shaped fixture; then run the 100-clip test split using the actual custom-zipformer CLI and preserve the run metadata.
