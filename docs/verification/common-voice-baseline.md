@@ -41,3 +41,22 @@ Record the recognizer command, model hash, commit, runtime, audio preprocessing,
 ## Scope and limitations
 
 Common Voice is read speech, not spontaneous conversation. It provides clean, speaker-diverse baseline coverage, but it does not adequately test fillers, interruptions, repetitions, overlapping speech, or VAD/chunk-boundary failures. Add a separate spontaneous-speech corpus only after reviewing its terms and suitability. Do not infer that a short transcript is a one-mora/particle challenge without listening to the clip.
+
+
+## Generic inference adapter
+
+The repository currently contains investigation/measurement scaffolding but no checked-in recognizer CLI or model artifact. Therefore the runner accepts the actual inference command instead of guessing a project-specific API:
+
+```bash
+python scripts/run_baseline_asr.py tests/data/common_voice_ja/manifest.json \
+  --command 'YOUR_ASR_CLI --input {audio}' \
+  --output-tsv tests/data/common_voice_ja/transcripts.tsv
+python scripts/deletion_metrics.py tests/data/common_voice_ja/transcripts.tsv \
+  --output-json tests/data/common_voice_ja/baseline_metrics.json
+```
+
+The runner invokes each clip separately, substitutes the absolute audio path for `{audio}`, treats stdout as the raw transcript, records failures, and never uses a shell. Confirm the CLI's output convention before running. If it writes transcript files instead of stdout, use a small adapter command that prints only the recognized text.
+
+## Measurement boundary
+
+Actual baseline numbers require all three local prerequisites: (1) Common Voice archive downloaded through the official portal, (2) extracted test split, and (3) the custom-zipformer inference command plus its model files. None of those local assets/credentials are available through the repository connection, so no corpus download or ASR run is claimed by this commit.
