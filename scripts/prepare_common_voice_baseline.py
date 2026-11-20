@@ -79,9 +79,11 @@ def main() -> int:
     out_clips = args.output / "clips"
     out_clips.mkdir(parents=True, exist_ok=True)
     manifest = []
+    missing_audio = []
     for i, row in enumerate(selected):
         source = clips_dir / row["path"]
         if not source.is_file():
+            missing_audio.append(str(source))
             continue
         target_name = f"cvja27_{i:05d}{source.suffix.lower()}"
         target = out_clips / target_name
@@ -95,6 +97,15 @@ def main() -> int:
             "source_path": row["path"],
             "audio_sha256": digest(target),
         })
+
+    if missing_audio:
+        examples = ", ".join(missing_audio[:5])
+        raise SystemExit(
+            f"Selected {len(selected)} rows but {len(missing_audio)} audio files are missing; "
+            f"examples: {examples}"
+        )
+    if len(manifest) != len(selected):
+        raise SystemExit(f"Prepared {len(manifest)} clips from {len(selected)} selected rows")
 
     args.output.mkdir(parents=True, exist_ok=True)
     (args.output / "manifest.json").write_text(
