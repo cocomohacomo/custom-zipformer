@@ -86,7 +86,7 @@ jobs:
             --report overlap_2s=tests/data/fleurs_ja/metrics_overlap_2s.json \
             --output-json tests/data/fleurs_ja/mode_comparison.json
       - name: Validate paired inference outputs and report omissions
-        run: python scripts/validate_asr_evaluation.py --root tests/data/fleurs_ja
+        run: python scripts/validate_asr_evaluation.py --root tests/data/fleurs_ja --output-json tests/data/fleurs_ja/execution_diagnostics.json
       - name: Sanitize output to aggregate-only metrics
         if: success()
         run: |
@@ -103,7 +103,7 @@ jobs:
           rm -rf ~/.cache/huggingface/hub/datasets--google--fleurs
           rm -f tests/data/fleurs_ja/manifest.json tests/data/fleurs_ja/transcripts*.tsv
           rm -f tests/data/fleurs_ja/metrics*.stdout.json tests/data/fleurs_ja/metrics*.json
-          rm -f tests/data/fleurs_ja/mode_comparison.json
+          rm -f tests/data/fleurs_ja/mode_comparison.json tests/data/fleurs_ja/execution_diagnostics.json
       - name: Upload sanitized aggregate metrics only
         if: success()
         uses: actions/upload-artifact@v4
