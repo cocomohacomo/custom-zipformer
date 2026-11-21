@@ -142,10 +142,9 @@ def main() -> int:
             channels = int(samples.shape[1])
             if sr <= 0:
                 raise SystemExit(f"Invalid sample rate: {audio_path}")
-            mono = samples.mean(axis=1)
-            if mono.size == 0:
-                raise SystemExit(f"Audio is empty: {audio_path}")
-            duration = float(len(mono) / sr)
+            duration = float(len(samples) / sr)
+            # Downmix with anti-phase protection, then resample exactly once.
+            mono = prepare_inference_audio(samples, int(sr), 16000)
             rms = float(np.sqrt(np.mean(np.square(mono, dtype=np.float64))))
             peak = float(np.max(np.abs(mono)))
             near_silence = float(np.mean(np.abs(mono) < 1e-4))
@@ -158,7 +157,7 @@ def main() -> int:
                     gain = min(gain, 0.95 / peak) if peak > 0 else gain
                     mono = mono * np.float32(gain)
             inference_rms = float(np.sqrt(np.mean(np.square(mono, dtype=np.float64))))
-            inference_samples = prepare_inference_audio(samples, int(sr), 16000)
+            inference_samples = np.asarray(mono, dtype=np.float32)
             boundaries = []
             chunk_start_offsets = [0.0]
             if args.silence_aware_chunk_seconds is not None:
