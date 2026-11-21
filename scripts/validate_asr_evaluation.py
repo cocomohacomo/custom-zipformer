@@ -62,20 +62,25 @@ def _audio_diagnostics(rows: list[dict[str, str]], mode: str) -> dict:
     chunk_counts = []
     short_chunks = 0
     silent_chunks = 0
+    empty_chunks = 0
     for row in rows:
         duration = _finite_float(row.get("audio_duration_seconds"), "audio duration")
         chunks = _positive_int(row.get("inference_chunks"), "inference chunk count")
         short = row.get("inference_short_chunks_lt_25ms", "0")
         silent = row.get("inference_silent_chunks", "0")
-        if not isinstance(short, str) or not short.isdigit() or not isinstance(silent, str) or not silent.isdigit():
+        empty = row.get("inference_empty_chunks")
+        if (not isinstance(short, str) or not short.isdigit()
+                or not isinstance(silent, str) or not silent.isdigit()
+                or not isinstance(empty, str) or not empty.isdigit()):
             raise ValueError("chunk quality diagnostics are missing or invalid")
-        short_count, silent_count = int(short), int(silent)
-        if short_count > chunks or silent_count > chunks:
+        short_count, silent_count, empty_count = int(short), int(silent), int(empty)
+        if short_count > chunks or silent_count > chunks or empty_count > chunks:
             raise ValueError("chunk quality diagnostics exceed the chunk count")
         durations.append(duration)
         chunk_counts.append(chunks)
         short_chunks += short_count
         silent_chunks += silent_count
+        empty_chunks += empty_count
 
         if mode == "whole" and chunks != 1:
             raise ValueError("whole-utterance mode must decode exactly one chunk per case")
@@ -117,6 +122,8 @@ def _audio_diagnostics(rows: list[dict[str, str]], mode: str) -> dict:
             "max_chunks_per_case": max(chunk_counts),
             "short_chunks_lt_25ms": short_chunks,
             "silent_chunks": silent_chunks,
+            "empty_output_chunks": empty_chunks,
+            "empty_output_chunk_rate": empty_chunks / sum(chunk_counts),
         },
     }
 
