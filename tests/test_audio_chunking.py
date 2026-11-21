@@ -54,6 +54,15 @@ class OverlapChunkingTests(unittest.TestCase):
     def test_short_prefix_is_preserved(self):
         self.assertEqual(merge_overlapping_text(["東京", "京都"]), "東京京都")
 
+    def test_two_character_coincidental_suffix_is_preserved(self):
+        self.assertEqual(merge_overlapping_text(["今日は天気", "天気予報です"]), "今日は天気天気予報です")
+
+    def test_substantial_exact_overlap_is_removed(self):
+        self.assertEqual(merge_overlapping_text(["今日はとても良い天気", "とても良い天気ですね"]), "今日はとても良い天気ですね")
+
+    def test_custom_minimum_overlap_is_honored(self):
+        self.assertEqual(merge_overlapping_text(["abcdef", "defghi"], min_overlap_chars=3), "abcdefghi")
+
 
 if __name__ == "__main__":
     unittest.main()
