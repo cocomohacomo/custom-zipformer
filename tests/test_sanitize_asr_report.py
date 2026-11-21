@@ -8,10 +8,36 @@ from unittest.mock import patch
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-from sanitize_asr_report import main, sanitize_comparisons, sanitize_metrics
+from sanitize_asr_report import main, sanitize_comparisons, sanitize_execution_diagnostics, sanitize_metrics
 
 
 class SanitizeAsrReportTests(unittest.TestCase):
+
+    def test_execution_diagnostics_allowlist_only_aggregate_fields(self):
+        raw = {
+            "modes": {
+                "fixed_15s": {
+                    "case_count": 2,
+                    "audio_duration_seconds": {"min": 3.0, "median": 8.0, "max": 12.0},
+                    "chunking": {
+                        "single_chunk_cases": 2, "multi_chunk_cases": 0,
+                        "multi_chunk_case_rate": 0.0, "total_chunks": 2,
+                        "max_chunks_per_case": 1, "short_chunks_lt_25ms": 0,
+                        "silent_chunks": 0,
+                    },
+                    "case_ids": ["PRIVATE_ID"],
+                    "transcripts": ["private text"],
+                }
+            },
+            "private-utterance-id": {"transcripts": ["private"]},
+        }
+        safe = sanitize_execution_diagnostics(raw)
+        rendered = json.dumps(safe)
+        self.assertEqual(safe["fixed_15s"]["chunking"]["multi_chunk_cases"], 0)
+        self.assertNotIn("PRIVATE_ID", rendered)
+        self.assertNotIn("private text", rendered)
+        self.assertNotIn("case_ids", rendered)
+
     def test_only_aggregate_fields_are_retained(self):
         report = {
             "case_count": 3,
@@ -151,6 +177,9 @@ class SanitizeAsrReportTests(unittest.TestCase):
                 workflow = (root / ".github" / "workflows" / f"validate-{dataset}.yml").read_text(encoding="utf-8")
                 self.assertIn("sanitize_asr_report.py", workflow)
                 self.assertIn("validate_asr_evaluation.py", workflow)
+                self.assertIn("--output-json", workflow)
+                self.assertIn("--diagnostics execution_diagnostics.json", workflow)
+                self.assertIn("execution_diagnostics.json", workflow)
                 self.assertNotIn("Fail on complete, near-complete, or severe deletion", workflow)
                 self.assertIn("--report whole=metrics.json", workflow)
                 self.assertIn("if: success()", workflow)
