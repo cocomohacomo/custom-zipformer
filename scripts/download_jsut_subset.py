@@ -17,6 +17,22 @@ from pathlib import Path
 
 REPO_ID = "FluidInference/JSUT-basic5000"
 SUBSET_ROOT = "basic5000"
+SUBSET_ROOT_CANDIDATES = ("basic5000", "jsut_ver1.1/basic5000")
+
+
+def locate_jsut_transcripts(hf_hub_download):
+    """Resolve the mirror's actual file layout without exposing lookup errors."""
+    for root in SUBSET_ROOT_CANDIDATES:
+        try:
+            path = hf_hub_download(
+                repo_id=REPO_ID,
+                repo_type="dataset",
+                filename=f"{root}/transcript_utf8.txt",
+            )
+            return Path(path), root
+        except Exception:
+            continue
+    raise ValueError("Required JSUT transcript file could not be located")
 
 
 def parse_transcripts(text: str) -> dict[str, str]:
@@ -62,12 +78,8 @@ def prepare_dataset(limit: int, output: Path, seed: int = 270021) -> dict:
     except ImportError as exc:
         raise SystemExit("Install huggingface_hub to download the JSUT evaluation subset") from exc
 
-    transcript_path = hf_hub_download(
-        repo_id=REPO_ID,
-        repo_type="dataset",
-        filename=f"{SUBSET_ROOT}/transcript_utf8.txt",
-    )
-    transcripts = parse_transcripts(Path(transcript_path).read_text(encoding="utf-8"))
+    transcript_path, dataset_root = locate_jsut_transcripts(hf_hub_download)
+    transcripts = parse_transcripts(transcript_path.read_text(encoding="utf-8"))
     buckets = {"short": [], "medium": [], "long": []}
     for utterance_id, sentence in transcripts.items():
         buckets[classify(sentence)].append((utterance_id, sentence))
@@ -86,7 +98,7 @@ def prepare_dataset(limit: int, output: Path, seed: int = 270021) -> dict:
     clips_dir.mkdir(parents=True, exist_ok=True)
     manifest = []
     for index, (category, utterance_id, sentence) in enumerate(selected):
-        filename = f"{SUBSET_ROOT}/wav/{utterance_id}.wav"
+        filename = f"{dataset_root}/wav/{utterance_id}.wav"
         source = Path(hf_hub_download(
             repo_id=REPO_ID, repo_type="dataset", filename=filename
         ))
