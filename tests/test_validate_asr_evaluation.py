@@ -63,6 +63,17 @@ class ValidateAsrEvaluationTests(unittest.TestCase):
             self.assertEqual(result["modes"]["fixed_15s"]["chunking"]["multi_chunk_cases"], 2)
             self.assertEqual(result["modes"]["silence_aware_15s"]["chunking"]["total_chunks"], 4)
 
+
+    def test_short_audio_chunking_diagnostics_show_no_activation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self._write_fixture(root)
+            path = root / MODES["fixed_15s"][0]
+            content = path.read_text(encoding="utf-8").replace("\\t30.0\\t", "\\t8.0\\t").replace("\\t2\\t", "\\t1\\t")
+            path.write_text(content, encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "fixed chunk count"):
+                validate_evaluation(root)
+
     def test_cli_emits_aggregate_only_output(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
