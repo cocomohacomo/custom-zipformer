@@ -196,8 +196,15 @@ jobs:
               raise SystemExit("Overlap inference does not contain exactly one result per input clip.")
           if [r["case_id"] for r in overlap_rows] != [r["case_id"] for r in raw_rows]:
               raise SystemExit("Raw and overlap inference case order differs.")
-          if not overlap_rows or "inference_chunks" not in overlap_rows[0]:
-              raise SystemExit("Overlap chunk-count diagnostics are missing.")
+          if not overlap_rows or "inference_chunks" not in overlap_rows[0] or "chunk_start_offsets_seconds" not in overlap_rows[0]:
+              raise SystemExit("Overlap chunk-count or chunk-start diagnostics are missing.")
+          for row in overlap_rows:
+              chunk_count = int(row["inference_chunks"])
+              starts = [float(value) for value in row["chunk_start_offsets_seconds"].split(",") if value]
+              if len(starts) != chunk_count or not starts or starts[0] != 0.0:
+                  raise SystemExit(f"Invalid overlap chunk-start offsets for {row['case_id']}.")
+              if any(right <= left for left, right in zip(starts, starts[1:])):
+                  raise SystemExit(f"Non-increasing overlap chunk starts for {row['case_id']}.")
           print(f"Validated raw, normalized, fixed-chunk, silence-aware, and overlap metrics for {report['case_count']} clips.")
           PY
       - name: Save baseline artifacts
