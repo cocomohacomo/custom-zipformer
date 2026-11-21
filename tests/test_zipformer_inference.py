@@ -12,7 +12,7 @@ class ZipformerInferenceSourceTests(unittest.TestCase):
     def test_overlap_inference_uses_waveform_overlap_helper(self):
         source = Path("scripts/run_sherpa_zipformer.py").read_text(encoding="utf-8")
         self.assertIn("split_with_overlap(", source)
-        self.assertIn("chunks, boundaries = split_with_overlap(", source)
+        self.assertIn("chunks, overlap_starts = split_with_overlap(", source)
 
 
 if __name__ == "__main__":
