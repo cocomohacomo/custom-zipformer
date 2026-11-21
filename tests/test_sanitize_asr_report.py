@@ -23,7 +23,8 @@ class SanitizeAsrReportTests(unittest.TestCase):
                         "single_chunk_cases": 2, "multi_chunk_cases": 0,
                         "multi_chunk_case_rate": 0.0, "total_chunks": 2,
                         "max_chunks_per_case": 1, "short_chunks_lt_25ms": 0,
-                        "silent_chunks": 0,
+                        "silent_chunks": 0, "empty_output_chunks": 1,
+                        "empty_output_chunk_rate": 0.5,
                     },
                     "case_ids": ["PRIVATE_ID"],
                     "transcripts": ["private text"],
@@ -34,6 +35,8 @@ class SanitizeAsrReportTests(unittest.TestCase):
         safe = sanitize_execution_diagnostics(raw)
         rendered = json.dumps(safe)
         self.assertEqual(safe["fixed_15s"]["chunking"]["multi_chunk_cases"], 0)
+        self.assertEqual(safe["fixed_15s"]["chunking"]["empty_output_chunks"], 1)
+        self.assertEqual(safe["fixed_15s"]["chunking"]["empty_output_chunk_rate"], 0.5)
         self.assertNotIn("PRIVATE_ID", rendered)
         self.assertNotIn("private text", rendered)
         self.assertNotIn("case_ids", rendered)
