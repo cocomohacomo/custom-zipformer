@@ -94,6 +94,32 @@ class SanitizeAsrReportTests(unittest.TestCase):
         self.assertIsNone(safe["overlap_2s"]["cer_delta"])
         self.assertIsNone(safe["overlap_2s"]["cases_unchanged"])
 
+    def test_comparison_sanitizer_handles_unhashable_baselines_and_extreme_numbers(self):
+        raw = {
+            "paired_comparisons": {
+                "fixed_15s": {"baseline": ["private"], "deletion_delta": 10 ** 10000},
+                "overlap_2s": {"baseline": {"private": "value"}, "cer_delta": -0.1},
+            }
+        }
+        safe = sanitize_comparisons(raw)
+        self.assertIsNone(safe["fixed_15s"]["baseline"])
+        self.assertIsNone(safe["fixed_15s"]["deletion_delta"])
+        self.assertIsNone(safe["overlap_2s"]["baseline"])
+        self.assertEqual(safe["overlap_2s"]["cer_delta"], -0.1)
+
+    def test_rates_reject_negative_and_out_of_range_values(self):
+        report = {
+            "summary": {"char": {
+                "cer": -0.1, "deletion_rate": 1.1,
+                "insertion_rate": 0.2, "substitution_rate": -0.01,
+            }}
+        }
+        safe = sanitize_metrics(report)
+        self.assertIsNone(safe["character_error_rate"])
+        self.assertIsNone(safe["character_deletion_rate"])
+        self.assertEqual(safe["character_insertion_rate"], 0.2)
+        self.assertIsNone(safe["character_substitution_rate"])
+
     def test_dataset_workflow_logs_do_not_emit_utterance_identifiers(self):
         root = Path(__file__).resolve().parents[1]
         for dataset in ("jsut", "fleurs"):
