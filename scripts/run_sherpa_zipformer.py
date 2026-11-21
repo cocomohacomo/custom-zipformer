@@ -82,7 +82,7 @@ def main() -> int:
         "case_id", "category", "reference", "hypothesis",
         "audio_duration_seconds", "audio_rms", "audio_peak",
         "near_silence_fraction", "clipping_fraction",
-        "source_sample_rate", "source_channels", "applied_gain_db", "inference_audio_rms", "inference_chunks", "chunk_boundaries_seconds",
+        "source_sample_rate", "source_channels", "applied_gain_db", "inference_audio_rms", "inference_chunks", "chunk_boundaries_seconds", "chunk_start_offsets_seconds",
     ]
     args.output_tsv.parent.mkdir(parents=True, exist_ok=True)
     with args.output_tsv.open("w", encoding="utf-8", newline="") as f:
@@ -116,6 +116,7 @@ def main() -> int:
                 mono = resample_poly(mono, 16000 // g, int(sr) // g).astype(np.float32)
             inference_samples = np.asarray(mono, dtype=np.float32)
             boundaries = []
+            chunk_start_offsets = [0.0]
             if args.silence_aware_chunk_seconds is not None:
                 from audio_chunking import split_at_low_energy
                 chunks, boundaries = split_at_low_energy(
@@ -126,10 +127,11 @@ def main() -> int:
                 chunks = [inference_samples]
             elif args.chunk_overlap_seconds > 0:
                 from audio_chunking import split_with_overlap
-                chunks, boundaries = split_with_overlap(
+                chunks, overlap_starts = split_with_overlap(
                     inference_samples, 16000, args.chunk_seconds,
                     args.chunk_overlap_seconds,
                 )
+                chunk_start_offsets = [0.0, *overlap_starts]
             else:
                 chunk_samples = max(1, int(round(args.chunk_seconds * 16000)))
                 chunks = [inference_samples[start:start + chunk_samples]
@@ -161,6 +163,7 @@ def main() -> int:
                 "inference_audio_rms": f"{inference_rms:.8f}",
                 "inference_chunks": len(chunks),
                 "chunk_boundaries_seconds": ",".join(f"{v:.3f}" for v in boundaries),
+                "chunk_start_offsets_seconds": ",".join(f"{v:.3f}" for v in chunk_start_offsets),
             })
     print(json.dumps({"decoded": len(entries), "output_tsv": str(args.output_tsv),
                       "normalization": {"target_rms_dbfs": args.normalize_rms_dbfs,
