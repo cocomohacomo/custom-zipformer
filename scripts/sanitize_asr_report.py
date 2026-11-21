@@ -148,7 +148,6 @@ def sanitize_execution_diagnostics(report: dict) -> dict:
                 "single_chunk_cases", "multi_chunk_cases", "multi_chunk_case_rate",
                 "total_chunks", "max_chunks_per_case", "short_chunks_lt_25ms", "silent_chunks",
                 "empty_output_chunks",
-                "empty_output_chunks",
             )
         }
         empty_rate = _number(chunking.get("empty_output_chunk_rate"))
