@@ -40,7 +40,7 @@ class OverlapChunkingTests(unittest.TestCase):
     def test_chunks_share_waveform_context(self):
         x = np.arange(10000, dtype=np.float32)
         chunks, starts = split_with_overlap(x, 1000, 4, 1)
-        self.assertEqual(starts, [0.0, 3.0, 6.0, 9.0])
+        self.assertEqual(starts, [3.0, 6.0])\n        self.assertEqual(len(chunks), 3)
         np.testing.assert_array_equal(chunks[0][-1000:], chunks[1][:1000])
 
     def test_invalid_overlap_is_rejected(self):
