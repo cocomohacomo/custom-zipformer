@@ -99,6 +99,51 @@ class ValidateAsrEvaluationTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "case count"):
                 validate_evaluation(root)
 
+    def test_boolean_and_out_of_range_omission_counts_are_rejected(self):
+        for invalid in (True, -1, 3):
+            with self.subTest(invalid=invalid), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                self._write_fixture(root)
+                path = root / MODES["whole"][1]
+                report = json.loads(path.read_text(encoding="utf-8"))
+                report["near_complete_omission"]["count"] = invalid
+                path.write_text(json.dumps(report), encoding="utf-8")
+                with self.assertRaisesRegex(ValueError, "omission metrics"):
+                    validate_evaluation(root)
+
+    def test_complete_omission_count_must_match_empty_hypotheses(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self._write_fixture(root)
+            path = root / MODES["whole"][1]
+            report = json.loads(path.read_text(encoding="utf-8"))
+            report["complete_omission"]["empty_hypothesis_count"] = 0
+            path.write_text(json.dumps(report), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "counts disagree"):
+                validate_evaluation(root)
+
+    def test_non_finite_or_invalid_rates_are_rejected(self):
+        for field, invalid in (("cer", float("nan")), ("deletion_rate", 1.1), ("deletion_rate", True)):
+            with self.subTest(field=field, invalid=invalid), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                self._write_fixture(root)
+                path = root / MODES["whole"][1]
+                report = json.loads(path.read_text(encoding="utf-8"))
+                report["summary"]["char"][field] = invalid
+                path.write_text(json.dumps(report), encoding="utf-8")
+                with self.assertRaisesRegex(ValueError, "rate is invalid"):
+                    validate_evaluation(root)
+
+    def test_invalid_overlap_chunk_count_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self._write_fixture(root)
+            path = root / MODES["overlap_2s"][0]
+            content = path.read_text(encoding="utf-8").replace("\t2\t", "\t2.5\t")
+            path.write_text(content, encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "chunk diagnostics"):
+                validate_evaluation(root)
+
 
 if __name__ == "__main__":
     unittest.main()
