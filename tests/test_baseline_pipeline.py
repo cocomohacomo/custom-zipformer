@@ -46,6 +46,26 @@ class BaselinePreparationTests(unittest.TestCase):
             self.assertTrue(all(len(item["audio_sha256"]) == 64 for item in m1["manifest"]))
 
 
+    def test_missing_audio_error_does_not_echo_clip_identifier(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td) / "corpus"
+            root.mkdir()
+            with (root / "test.tsv").open("w", encoding="utf-8", newline="") as stream:
+                writer = csv.DictWriter(stream, fieldnames=["path", "sentence"], delimiter="\t")
+                writer.writeheader()
+                writer.writerow({"path": "PRIVATE_CLIP_IDENTIFIER.mp3", "sentence": "短文"})
+            old_argv = sys.argv
+            try:
+                sys.argv = ["prepare", str(root), "--limit", "1", "--output", str(Path(td) / "out")]
+                with self.assertRaises(SystemExit) as caught:
+                    prepare_main()
+                self.assertNotIn("PRIVATE_CLIP_IDENTIFIER", str(caught.exception))
+                self.assertIn("1 audio files are missing", str(caught.exception))
+            finally:
+                sys.argv = old_argv
+
+
+
 class BaselineRunnerTests(unittest.TestCase):
     def test_runner_captures_transcript_and_records_failure(self):
         with tempfile.TemporaryDirectory() as td:
