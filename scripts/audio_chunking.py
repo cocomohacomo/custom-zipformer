@@ -98,14 +98,14 @@ def merge_timestamped_chunks(
     if count == 0:
         return "", "empty"
     if not (len(chunk_start_seconds) == len(chunk_durations_seconds) == count):
-        return "".join(str(item.get("text", "")).strip() for item in chunk_results), "text_fallback"
+        return merge_overlapping_text([str(item.get("text", "")) for item in chunk_results]), "text_fallback"
     normalized = []
     for index, item in enumerate(chunk_results):
         text = str(item.get("text", "")).strip()
         tokens = list(item.get("tokens") or [])
         timestamps = list(item.get("timestamps") or [])
         if not tokens or len(tokens) != len(timestamps):
-            return "".join(str(x.get("text", "")).strip() for x in chunk_results), "text_fallback"
+            return merge_overlapping_text([str(x.get("text", "")) for x in chunk_results]), "text_fallback"
         try:
             times = [float(value) for value in timestamps]
         except (TypeError, ValueError):
