@@ -7,12 +7,27 @@ import unittest
 from unittest.mock import patch
 
 from scripts import download_jsut_subset as jsut
-from scripts.download_jsut_subset import SUBSET_ROOT, classify, parse_transcripts
+from scripts.download_jsut_subset import SUBSET_ROOT, classify, locate_jsut_transcripts, parse_transcripts
 
 
 class JsutDatasetPreparationTests(unittest.TestCase):
     def test_huggingface_mirror_root_matches_repository_tree(self):
         self.assertEqual(SUBSET_ROOT, "basic5000")
+
+    def test_resolves_flat_huggingface_mirror_layout_after_nested_path_404(self):
+        requested = []
+        def fake_download(*, repo_id, repo_type, filename):
+            requested.append(filename)
+            if filename.startswith("basic5000/"):
+                raise FileNotFoundError("not present in this layout")
+            return "/tmp/jsut-transcript.txt"
+        path, root = locate_jsut_transcripts(fake_download)
+        self.assertEqual(str(path), "/tmp/jsut-transcript.txt")
+        self.assertEqual(root, "jsut_ver1.1/basic5000")
+        self.assertEqual(requested, [
+            "basic5000/transcript_utf8.txt",
+            "jsut_ver1.1/basic5000/transcript_utf8.txt",
+        ])
 
     def test_parses_colon_inside_transcript(self):
         parsed = parse_transcripts(
