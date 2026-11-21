@@ -139,7 +139,7 @@ jobs:
           python scripts/run_sherpa_zipformer.py tests/data/common_voice_ja/manifest.json --model-dir models/zipformer-ja --threads 2 --chunk-seconds 15 --chunk-overlap-seconds 2 --output-tsv tests/data/common_voice_ja/transcripts_overlap_2s.tsv
       - name: Calculate deletion-focused metrics
         run: |
-          python scripts/deletion_metrics.py tests/data/common_voice_ja/transcripts.tsv --output-json tests/data/common_voice_ja/baseline_metrics.json > tests/data/common_voice_ja/metrics.stdout.json
+          python scripts/deletion_metrics.py tests/data/common_voice_ja/transcripts.tsv --output-json tests/data/common_voice_ja/metrics.json > tests/data/common_voice_ja/metrics.stdout.json
           python scripts/deletion_metrics.py tests/data/common_voice_ja/transcripts_rms_normalized.tsv --output-json tests/data/common_voice_ja/normalized_metrics.json > tests/data/common_voice_ja/normalized_metrics.stdout.json
           python scripts/deletion_metrics.py tests/data/common_voice_ja/transcripts_chunked_15s.tsv --output-json tests/data/common_voice_ja/chunked_15s_metrics.json > tests/data/common_voice_ja/chunked_15s_metrics.stdout.json
           python scripts/deletion_metrics.py tests/data/common_voice_ja/transcripts_silence_aware_15s.tsv --output-json tests/data/common_voice_ja/silence_aware_15s_metrics.json > tests/data/common_voice_ja/silence_aware_15s_metrics.stdout.json
@@ -147,7 +147,7 @@ jobs:
       - name: Compare paired inference modes
         run: |
           python scripts/compare_asr_modes.py \
-            --report whole=tests/data/common_voice_ja/baseline_metrics.json \
+            --report whole=tests/data/common_voice_ja/metrics.json \
             --report rms_normalized=tests/data/common_voice_ja/normalized_metrics.json \
             --report fixed_15s=tests/data/common_voice_ja/chunked_15s_metrics.json \
             --report silence_aware=tests/data/common_voice_ja/silence_aware_15s_metrics.json \
@@ -159,7 +159,7 @@ jobs:
           import csv, json
           from pathlib import Path
           root = Path("tests/data/common_voice_ja")
-          report = json.loads((root / "baseline_metrics.json").read_text(encoding="utf-8"))
+          report = json.loads((root / "metrics.json").read_text(encoding="utf-8"))
           manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
           if report.get("case_count") != len(manifest["manifest"]):
               raise SystemExit("Metrics case_count does not match the prepared sample.")
@@ -235,6 +235,7 @@ jobs:
           rm -f downloads/zipformer-ja.tar.bz2
           rm -f tests/data/common_voice_ja/manifest.json
           rm -f tests/data/common_voice_ja/transcripts*.tsv
+          rm -f tests/data/common_voice_ja/metrics.json
           rm -f tests/data/common_voice_ja/*_metrics.json
           rm -f tests/data/common_voice_ja/*.stdout.json
           rm -f tests/data/common_voice_ja/mode_comparison.json
