@@ -132,10 +132,14 @@ jobs:
       - name: Run bounded RMS-normalized comparison inference
         run: |
           python scripts/run_sherpa_zipformer.py tests/data/common_voice_ja/manifest.json --model-dir models/zipformer-ja --threads 2 --normalize-rms-dbfs -26 --max-gain-db 12 --output-tsv tests/data/common_voice_ja/transcripts_rms_normalized.tsv
+      - name: Run fixed 15-second chunked inference comparison
+        run: |
+          python scripts/run_sherpa_zipformer.py tests/data/common_voice_ja/manifest.json --model-dir models/zipformer-ja --threads 2 --chunk-seconds 15 --output-tsv tests/data/common_voice_ja/transcripts_chunked_15s.tsv
       - name: Calculate deletion-focused metrics
         run: |
           python scripts/deletion_metrics.py tests/data/common_voice_ja/transcripts.tsv --output-json tests/data/common_voice_ja/baseline_metrics.json > tests/data/common_voice_ja/metrics.stdout.json
           python scripts/deletion_metrics.py tests/data/common_voice_ja/transcripts_rms_normalized.tsv --output-json tests/data/common_voice_ja/normalized_metrics.json > tests/data/common_voice_ja/normalized_metrics.stdout.json
+          python scripts/deletion_metrics.py tests/data/common_voice_ja/transcripts_chunked_15s.tsv --output-json tests/data/common_voice_ja/chunked_15s_metrics.json > tests/data/common_voice_ja/chunked_15s_metrics.stdout.json
       - name: Validate metrics report
         run: |
           python - <<'PY'
@@ -164,7 +168,16 @@ jobs:
               raise SystemExit("Raw and normalized inference case order differs.")
           if not normalized_rows or "applied_gain_db" not in normalized_rows[0] or "inference_audio_rms" not in normalized_rows[0]:
               raise SystemExit("Normalization diagnostics are missing.")
-          print(f"Validated raw and RMS-normalized metrics for {report['case_count']} clips.")
+          chunked = json.loads((root / "chunked_15s_metrics.json").read_text(encoding="utf-8"))
+          with (root / "transcripts_chunked_15s.tsv").open(encoding="utf-8", newline="") as f:
+              chunked_rows = list(csv.DictReader(f, delimiter="\\t"))
+          if chunked.get("case_count") != len(manifest["manifest"]) or len(chunked_rows) != len(manifest["manifest"]):
+              raise SystemExit("Chunked inference does not contain exactly one result per input clip.")
+          if [r["case_id"] for r in chunked_rows] != [r["case_id"] for r in raw_rows]:
+              raise SystemExit("Raw and chunked inference case order differs.")
+          if not chunked_rows or "inference_chunks" not in chunked_rows[0]:
+              raise SystemExit("Chunk-count diagnostics are missing.")
+          print(f"Validated raw, normalized, and 15-second chunked metrics for {report['case_count']} clips.")
           PY
       - name: Save baseline artifacts
         if: always()
@@ -179,5 +192,8 @@ jobs:
             tests/data/common_voice_ja/transcripts_rms_normalized.tsv
             tests/data/common_voice_ja/normalized_metrics.json
             tests/data/common_voice_ja/normalized_metrics.stdout.json
+            tests/data/common_voice_ja/transcripts_chunked_15s.tsv
+            tests/data/common_voice_ja/chunked_15s_metrics.json
+            tests/data/common_voice_ja/chunked_15s_metrics.stdout.json
           if-no-files-found: warn
           retention-days: 30
