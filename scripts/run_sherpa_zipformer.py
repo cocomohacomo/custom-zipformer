@@ -21,6 +21,10 @@ def main() -> int:
                    help="Maximum gain for optional RMS normalization (default: 12 dB)")
     p.add_argument("--chunk-seconds", type=float, default=None,
                    help="Decode each audio independently in fixed-size chunks; omit for whole-utterance decoding")
+    p.add_argument("--silence-aware-chunk-seconds", type=float, default=None,
+                   help="Split near low-energy frames around this target duration (mutually exclusive with --chunk-seconds)")
+    p.add_argument("--chunk-search-window-seconds", type=float, default=2.0,
+                   help="Search +/- this many seconds for a quiet chunk boundary (default: 2)")
     args = p.parse_args()
     if args.threads < 1:
         p.error("--threads must be >= 1")
@@ -28,6 +32,12 @@ def main() -> int:
         p.error("--max-gain-db must be >= 0")
     if args.chunk_seconds is not None and args.chunk_seconds <= 0:
         p.error("--chunk-seconds must be > 0")
+    if args.silence_aware_chunk_seconds is not None and args.silence_aware_chunk_seconds <= 0:
+        p.error("--silence-aware-chunk-seconds must be > 0")
+    if args.chunk_seconds is not None and args.silence_aware_chunk_seconds is not None:
+        p.error("--chunk-seconds and --silence-aware-chunk-seconds are mutually exclusive")
+    if args.chunk_search_window_seconds < 0:
+        p.error("--chunk-search-window-seconds must be >= 0")
     if args.normalize_rms_dbfs is not None and not -90 <= args.normalize_rms_dbfs <= 0:
         p.error("--normalize-rms-dbfs must be between -90 and 0 dBFS")
 
@@ -67,7 +77,7 @@ def main() -> int:
         "case_id", "category", "reference", "hypothesis",
         "audio_duration_seconds", "audio_rms", "audio_peak",
         "near_silence_fraction", "clipping_fraction",
-        "source_sample_rate", "source_channels", "applied_gain_db", "inference_audio_rms", "inference_chunks",
+        "source_sample_rate", "source_channels", "applied_gain_db", "inference_audio_rms", "inference_chunks", "chunk_boundaries_seconds",
     ]
     args.output_tsv.parent.mkdir(parents=True, exist_ok=True)
     with args.output_tsv.open("w", encoding="utf-8", newline="") as f:
@@ -100,7 +110,14 @@ def main() -> int:
                 g = gcd(int(sr), 16000)
                 mono = resample_poly(mono, 16000 // g, int(sr) // g).astype(np.float32)
             inference_samples = np.asarray(mono, dtype=np.float32)
-            if args.chunk_seconds is None:
+            boundaries = []
+            if args.silence_aware_chunk_seconds is not None:
+                from scripts.audio_chunking import split_at_low_energy
+                chunks, boundaries = split_at_low_energy(
+                    inference_samples, 16000, args.silence_aware_chunk_seconds,
+                    search_window_seconds=args.chunk_search_window_seconds,
+                )
+            elif args.chunk_seconds is None:
                 chunks = [inference_samples]
             else:
                 chunk_samples = max(1, int(round(args.chunk_seconds * 16000)))
@@ -127,11 +144,13 @@ def main() -> int:
                 "applied_gain_db": f"{20.0 * np.log10(gain):.4f}",
                 "inference_audio_rms": f"{inference_rms:.8f}",
                 "inference_chunks": len(chunks),
+                "chunk_boundaries_seconds": ",".join(f"{v:.3f}" for v in boundaries),
             })
     print(json.dumps({"decoded": len(entries), "output_tsv": str(args.output_tsv),
                       "normalization": {"target_rms_dbfs": args.normalize_rms_dbfs,
                                         "max_gain_db": args.max_gain_db if args.normalize_rms_dbfs is not None else 0},
                       "chunk_seconds": args.chunk_seconds,
+                      "silence_aware_chunk_seconds": args.silence_aware_chunk_seconds,
                       "diagnostics": fields[4:]}, ensure_ascii=False))
     return 0
 
