@@ -81,8 +81,14 @@ def split_with_overlap(samples: np.ndarray, sample_rate: int, chunk_seconds: flo
     return chunks, [start / sample_rate for start in starts[1:]]
 
 
-def merge_overlapping_text(texts: list[str], min_overlap_chars: int = 2) -> str:
-    """Remove the longest exact suffix/prefix text duplicate between adjacent chunks."""
+def merge_overlapping_text(texts: list[str], min_overlap_chars: int = 4) -> str:
+    """Remove only substantial exact suffix/prefix duplicates between adjacent chunks.
+
+    Short matches are intentionally preserved: in Japanese, two-character
+    coincidences are common and are not reliable evidence of repeated speech.
+    This remains a conservative text-only heuristic; timestamps or token-level
+    alignment are preferable when the recognizer exposes them.
+    """
     if min_overlap_chars < 1:
         raise ValueError("min_overlap_chars must be positive")
     merged = ""
