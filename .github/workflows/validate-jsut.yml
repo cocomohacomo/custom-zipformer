@@ -111,7 +111,7 @@ jobs:
       - name: Sanitize output to aggregate-only metrics
         if: success()
         run: |
-          python scripts/sanitize_asr_report.py --root tests/data/jsut_ja --comparison mode_comparison.json \
+          python scripts/sanitize_asr_report.py --root tests/data/jsut_ja --comparison mode_comparison.json --diagnostics execution_diagnostics.json \
             --report whole=metrics.json \
             --report fixed_15s=metrics_chunked_15s.json \
             --report silence_aware_15s=metrics_silence_aware_15s.json \
