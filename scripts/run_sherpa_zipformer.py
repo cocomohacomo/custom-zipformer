@@ -112,7 +112,7 @@ def main() -> int:
             inference_samples = np.asarray(mono, dtype=np.float32)
             boundaries = []
             if args.silence_aware_chunk_seconds is not None:
-                from scripts.audio_chunking import split_at_low_energy
+                from audio_chunking import split_at_low_energy
                 chunks, boundaries = split_at_low_energy(
                     inference_samples, 16000, args.silence_aware_chunk_seconds,
                     search_window_seconds=args.chunk_search_window_seconds,
