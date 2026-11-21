@@ -8,16 +8,6 @@ on:
         required: true
         default: "100"
         type: string
-  push:
-    paths:
-      - ".github/workflows/acquire-and-measure-baseline.yml"
-      - "scripts/run_sherpa_zipformer.py"
-      - "scripts/audio_chunking.py"
-      - "scripts/download_mdc_dataset.py"
-      - "scripts/prepare_common_voice_baseline.py"
-      - "scripts/deletion_metrics.py"
-      - "scripts/compare_asr_modes.py"
-      - "scripts/sanitize_asr_report.py"
 
 permissions:
   contents: read
