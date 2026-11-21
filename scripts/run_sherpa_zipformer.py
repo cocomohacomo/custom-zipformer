@@ -17,7 +17,6 @@ def prepare_inference_audio(samples, source_sample_rate: int, target_sample_rate
     """
     import numpy as np
     from math import gcd
-    from scipy.signal import resample_poly
 
     audio = np.asarray(samples)
     if audio.ndim not in (1, 2):
@@ -44,6 +43,7 @@ def prepare_inference_audio(samples, source_sample_rate: int, target_sample_rate
         mono = audio.copy()
 
     if source_sample_rate != target_sample_rate:
+        from scipy.signal import resample_poly
         divisor = gcd(int(source_sample_rate), int(target_sample_rate))
         mono = resample_poly(
             mono, target_sample_rate // divisor, source_sample_rate // divisor
