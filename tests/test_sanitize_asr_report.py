@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-from sanitize_asr_report import sanitize_metrics
+from sanitize_asr_report import sanitize_comparisons, sanitize_metrics
 
 
 class SanitizeAsrReportTests(unittest.TestCase):
@@ -39,6 +39,60 @@ class SanitizeAsrReportTests(unittest.TestCase):
         self.assertEqual(safe["category_summary"]["short"]["case_count"], 1)
         self.assertNotIn("reference", safe["category_summary"]["short"])
 
+
+    def test_metric_values_must_be_finite_numbers_not_untrusted_strings(self):
+        report = {
+            "case_count": "private-utterance-id",
+            "summary": {"char": {
+                "cer": "sensitive transcript", "deletion_rate": float("nan"),
+                "insertion_rate": 0.25, "substitution_rate": float("inf"),
+                "substitutions": True, "deletions": 4, "insertions": "audio.wav",
+            }},
+            "category_summary": {
+                "short": {"case_count": 2, "cer": "private text", "deletions": 1},
+                "private-utterance-id": {"case_count": 99, "cer": 1.0},
+            },
+            "complete_omission": {"empty_hypothesis_count": "private-id"},
+        }
+        safe = sanitize_metrics(report)
+        self.assertIsNone(safe["case_count"])
+        self.assertIsNone(safe["character_error_rate"])
+        self.assertIsNone(safe["character_deletion_rate"])
+        self.assertEqual(safe["character_insertion_rate"], 0.25)
+        self.assertIsNone(safe["character_substitution_rate"])
+        self.assertIsNone(safe["substitutions"])
+        self.assertEqual(safe["deletions"], 4)
+        self.assertIsNone(safe["insertions"])
+        self.assertIsNone(safe["complete_omission_count"])
+        self.assertEqual(safe["category_summary"]["short"]["deletions"], 1)
+        self.assertIsNone(safe["category_summary"]["short"]["cer"])
+        self.assertNotIn("private-utterance-id", safe["category_summary"])
+
+    def test_paired_comparison_sanitizer_allowlists_modes_and_numeric_fields(self):
+        raw = {
+            "paired_comparisons": {
+                "fixed_15s": {
+                    "baseline": "whole", "deletion_delta": -3, "cer_delta": -0.02,
+                    "cases_with_fewer_deletions": 2, "cases_with_more_deletions": 1,
+                    "cases_unchanged": 4, "improved_case_ids": ["private-id"],
+                },
+                "private-utterance-id": {
+                    "baseline": "private text", "deletion_delta": "sensitive",
+                },
+                "overlap_2s": {
+                    "baseline": "private-id", "deletion_delta": float("nan"),
+                    "cer_delta": "private transcript", "cases_unchanged": True,
+                },
+            }
+        }
+        safe = sanitize_comparisons(raw)
+        self.assertEqual(set(safe), {"fixed_15s", "overlap_2s"})
+        self.assertEqual(safe["fixed_15s"]["deletion_delta"], -3)
+        self.assertNotIn("improved_case_ids", safe["fixed_15s"])
+        self.assertIsNone(safe["overlap_2s"]["baseline"])
+        self.assertIsNone(safe["overlap_2s"]["deletion_delta"])
+        self.assertIsNone(safe["overlap_2s"]["cer_delta"])
+        self.assertIsNone(safe["overlap_2s"]["cases_unchanged"])
 
     def test_dataset_workflows_upload_only_sanitized_aggregate_reports(self):
         root = Path(__file__).resolve().parents[1]
