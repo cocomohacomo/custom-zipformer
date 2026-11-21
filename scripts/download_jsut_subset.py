@@ -24,13 +24,13 @@ def parse_transcripts(text: str) -> dict[str, str]:
         if not line:
             continue
         if ":" not in line:
-            raise ValueError(f"Malformed JSUT transcript line {line_number}: missing ':'")
+            raise ValueError("Malformed JSUT transcript input")
         utterance_id, sentence = line.split(":", 1)
         utterance_id, sentence = utterance_id.strip(), sentence.strip()
         if not utterance_id or not sentence:
             continue
         if utterance_id in result:
-            raise ValueError(f"Duplicate JSUT utterance id: {utterance_id}")
+            raise ValueError("Duplicate JSUT transcript entry")
         result[utterance_id] = sentence
     if not result:
         raise ValueError("No valid JSUT transcripts found")
@@ -78,7 +78,7 @@ def prepare_dataset(limit: int, output: Path, seed: int = 270021) -> dict:
             if buckets[category] and len(selected) < limit:
                 selected.append((category, *buckets[category].pop()))
     if not selected:
-        raise SystemExit("No JSUT utterances selected")
+        raise ValueError("No JSUT utterances selected")
 
     clips_dir = output / "clips"
     clips_dir.mkdir(parents=True, exist_ok=True)
@@ -89,7 +89,7 @@ def prepare_dataset(limit: int, output: Path, seed: int = 270021) -> dict:
             repo_id=REPO_ID, repo_type="dataset", filename=filename
         ))
         if not source.is_file() or source.stat().st_size == 0:
-            raise SystemExit(f"Downloaded JSUT audio is missing or empty: {utterance_id}")
+            raise ValueError("Downloaded JSUT audio is missing or empty")
         target_name = f"jsut_{index:05d}.wav"
         target = clips_dir / target_name
         shutil.copy2(source, target)
@@ -128,7 +128,11 @@ def main() -> int:
     args = parser.parse_args()
     if not 1 <= args.limit <= 500:
         parser.error("--limit must be between 1 and 500")
-    metadata = prepare_dataset(args.limit, args.output, args.seed)
+    try:
+        metadata = prepare_dataset(args.limit, args.output, args.seed)
+    except Exception:
+        print("JSUT dataset preparation failed; detailed source information is suppressed.")
+        return 1
     print(json.dumps({
         "dataset": metadata["dataset_id"],
         "requested": metadata["requested"],
