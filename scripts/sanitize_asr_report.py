@@ -147,8 +147,14 @@ def sanitize_execution_diagnostics(report: dict) -> dict:
             for key in (
                 "single_chunk_cases", "multi_chunk_cases", "multi_chunk_case_rate",
                 "total_chunks", "max_chunks_per_case", "short_chunks_lt_25ms", "silent_chunks",
+                "empty_output_chunks",
+                "empty_output_chunks",
             )
         }
+        empty_rate = _number(chunking.get("empty_output_chunk_rate"))
+        if empty_rate is None or not 0 <= empty_rate <= 1:
+            continue
+        clean_chunking["empty_output_chunk_rate"] = empty_rate
         if any(value is None for value in clean_duration.values()) or any(
             value is None for value in clean_chunking.values()
         ):
