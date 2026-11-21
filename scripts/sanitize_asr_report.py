@@ -4,16 +4,19 @@
 Drops transcript text, audio references, per-utterance IDs, and detailed case rows.
 """
 from __future__ import annotations
+
 import argparse
 import json
+import math
 from pathlib import Path
 
 CATEGORY_NAMES = {"short", "medium", "long", "uncategorized"}
-CATEGORY_METRIC_KEYS = (
+COUNT_KEYS = {
     "case_count", "substitutions", "deletions", "insertions",
-    "reference_units", "hypothesis_units", "cer", "deletion_rate",
-    "insertion_rate", "substitution_rate",
-)
+    "reference_units", "hypothesis_units",
+}
+RATE_KEYS = {"cer", "deletion_rate", "insertion_rate", "substitution_rate"}
+CATEGORY_METRIC_KEYS = tuple(sorted(COUNT_KEYS | RATE_KEYS))
 
 METRIC_FILES = {
     "whole": "metrics.json",
@@ -22,28 +25,95 @@ METRIC_FILES = {
     "overlap_2s": "metrics_overlap_2s.json",
 }
 
+
+def _number(value: object, *, integer: bool = False, nonnegative: bool = False):
+    """Return a finite numeric scalar, never arbitrary text or booleans."""
+    if isinstance(value, bool):
+        return None
+    if integer:
+        if not isinstance(value, int):
+            return None
+        result = value
+    else:
+        if not isinstance(value, (int, float)):
+            return None
+        result = value
+    if not math.isfinite(result) or (nonnegative and result < 0):
+        return None
+    return result
+
+
+def _metric_value(key: str, value: object):
+    if key in COUNT_KEYS:
+        return _number(value, integer=True, nonnegative=True)
+    if key in RATE_KEYS:
+        return _number(value)
+    return None
+
+
 def sanitize_metrics(report: dict) -> dict:
-    summary = report.get("summary", {}).get("char", {})
-    raw_categories = report.get("category_summary", {})
-    categories = {
-        name: {key: raw_categories[name].get(key) for key in CATEGORY_METRIC_KEYS}
-        for name in sorted(CATEGORY_NAMES.intersection(raw_categories))
-        if isinstance(raw_categories.get(name), dict)
-    }
+    if not isinstance(report, dict):
+        report = {}
+    summary = report.get("summary")
+    summary = summary.get("char") if isinstance(summary, dict) else {}
+    if not isinstance(summary, dict):
+        summary = {}
+    raw_categories = report.get("category_summary")
+    if not isinstance(raw_categories, dict):
+        raw_categories = {}
+
+    categories = {}
+    for name in sorted(CATEGORY_NAMES.intersection(raw_categories)):
+        raw = raw_categories.get(name)
+        if isinstance(raw, dict):
+            categories[name] = {
+                key: _metric_value(key, raw.get(key))
+                for key in CATEGORY_METRIC_KEYS
+            }
+
+    def nested_count(section: str, key: str):
+        value = report.get(section)
+        return _number(value.get(key), integer=True, nonnegative=True) if isinstance(value, dict) else None
+
     return {
-        "case_count": report.get("case_count"),
-        "character_error_rate": summary.get("cer"),
-        "character_deletion_rate": summary.get("deletion_rate"),
-        "character_insertion_rate": summary.get("insertion_rate"),
-        "character_substitution_rate": summary.get("substitution_rate"),
-        "substitutions": summary.get("substitutions"),
-        "deletions": summary.get("deletions"),
-        "insertions": summary.get("insertions"),
-        "complete_omission_count": report.get("complete_omission", {}).get("empty_hypothesis_count"),
-        "near_complete_omission_count": report.get("near_complete_omission", {}).get("count"),
-        "severe_deletion_count": report.get("severe_deletion", {}).get("count"),
+        "case_count": _number(report.get("case_count"), integer=True, nonnegative=True),
+        "character_error_rate": _metric_value("cer", summary.get("cer")),
+        "character_deletion_rate": _metric_value("deletion_rate", summary.get("deletion_rate")),
+        "character_insertion_rate": _metric_value("insertion_rate", summary.get("insertion_rate")),
+        "character_substitution_rate": _metric_value("substitution_rate", summary.get("substitution_rate")),
+        "substitutions": _metric_value("substitutions", summary.get("substitutions")),
+        "deletions": _metric_value("deletions", summary.get("deletions")),
+        "insertions": _metric_value("insertions", summary.get("insertions")),
+        "complete_omission_count": nested_count("complete_omission", "empty_hypothesis_count"),
+        "near_complete_omission_count": nested_count("near_complete_omission", "count"),
+        "severe_deletion_count": nested_count("severe_deletion", "count"),
         "category_summary": categories,
     }
+
+
+def sanitize_comparisons(comparison: dict) -> dict:
+    if not isinstance(comparison, dict):
+        return {}
+    raw = comparison.get("paired_comparisons")
+    if not isinstance(raw, dict):
+        return {}
+    paired = {}
+    allowed_modes = set(METRIC_FILES) - {"whole"}
+    for mode in sorted(allowed_modes.intersection(raw)):
+        item = raw.get(mode)
+        if not isinstance(item, dict):
+            continue
+        baseline = item.get("baseline")
+        paired[mode] = {
+            "baseline": baseline if baseline in METRIC_FILES else None,
+            "deletion_delta": _number(item.get("deletion_delta"), integer=True),
+            "cer_delta": _number(item.get("cer_delta")),
+            "cases_with_fewer_deletions": _number(item.get("cases_with_fewer_deletions"), integer=True, nonnegative=True),
+            "cases_with_more_deletions": _number(item.get("cases_with_more_deletions"), integer=True, nonnegative=True),
+            "cases_unchanged": _number(item.get("cases_unchanged"), integer=True, nonnegative=True),
+        }
+    return paired
+
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -56,24 +126,16 @@ def main() -> int:
         report = json.loads((args.root / filename).read_text(encoding="utf-8"))
         aggregate[mode] = sanitize_metrics(report)
     comparison = json.loads((args.root / args.comparison).read_text(encoding="utf-8"))
-    paired = {}
-    for mode, item in comparison.get("paired_comparisons", {}).items():
-        paired[mode] = {
-            key: item.get(key) for key in (
-                "baseline", "deletion_delta", "cer_delta",
-                "cases_with_fewer_deletions", "cases_with_more_deletions",
-                "cases_unchanged"
-            )
-        }
     output = {
         "privacy_policy": "aggregate metrics only; no audio, transcripts, manifests, or utterance identifiers",
         "modes": aggregate,
-        "paired_comparisons": paired,
+        "paired_comparisons": sanitize_comparisons(comparison),
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(output, ensure_ascii=False, indent=2) + chr(10), encoding="utf-8")
     print(json.dumps({"output": str(args.output), "mode_count": len(aggregate)}, ensure_ascii=False))
     return 0
+
 
 if __name__ == "__main__":
     raise SystemExit(main())
