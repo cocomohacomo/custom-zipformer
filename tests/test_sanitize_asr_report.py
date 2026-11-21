@@ -150,6 +150,8 @@ class SanitizeAsrReportTests(unittest.TestCase):
             with self.subTest(dataset=dataset):
                 workflow = (root / ".github" / "workflows" / f"validate-{dataset}.yml").read_text(encoding="utf-8")
                 self.assertIn("sanitize_asr_report.py", workflow)
+                self.assertIn("--report whole=metrics.json", workflow)
+                self.assertIn("if: success()", workflow)
                 self.assertIn("public_metrics.json", workflow)
                 self.assertIn("workflow_dispatch:", workflow)
                 self.assertIn("acknowledge_license", workflow)
@@ -217,13 +219,49 @@ class SanitizeAsrReportTests(unittest.TestCase):
             self.assertNotIn("PRIVATE_ID", rendered)
             self.assertNotIn("private transcript", rendered)
 
+    def test_cli_accepts_explicit_report_path_mappings(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            report = {"case_count": 2, "summary": {"char": {"cer": 0.3, "deletion_rate": 0.2}},
+                      "complete_omission": {"empty_hypothesis_count": 0},
+                      "near_complete_omission": {"count": 1}, "severe_deletion": {"count": 1}}
+            mapping = {"whole": "metrics.json", "fixed_15s": "chunked_15s_metrics.json",
+                       "silence_aware_15s": "silence_aware_15s_metrics.json",
+                       "overlap_2s": "overlap_2s_metrics.json", "rms_normalized": "normalized_metrics.json"}
+            for filename in mapping.values():
+                (root / filename).write_text(json.dumps(report), encoding="utf-8")
+            (root / "mode_comparison.json").write_text(json.dumps({"paired_comparisons": {}}), encoding="utf-8")
+            output = root / "public_metrics.json"
+            argv = ["sanitize_asr_report.py", "--root", str(root), "--comparison", "mode_comparison.json", "--output", str(output)]
+            for mode, filename in mapping.items():
+                argv.extend(["--report", f"{mode}={filename}"])
+            with patch.object(sys, "argv", argv), contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(main(), 0)
+            safe = json.loads(output.read_text(encoding="utf-8"))
+            self.assertEqual(set(safe["modes"]), set(mapping))
+
+    def test_explicit_report_mapping_requires_all_core_modes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            argv = ["sanitize_asr_report.py", "--root", str(root), "--output", str(root / "public_metrics.json"),
+                    "--report", "whole=metrics.json"]
+            with patch.object(sys, "argv", argv), contextlib.redirect_stderr(io.StringIO()):
+                with self.assertRaises(SystemExit) as error:
+                    main()
+            self.assertEqual(error.exception.code, 2)
+
     def test_common_voice_workflow_uploads_only_sanitized_aggregate_report(self):
         root = Path(__file__).resolve().parents[1]
         workflow = (root / ".github" / "workflows" / "acquire-and-measure-baseline.yml").read_text(encoding="utf-8")
         self.assertIn("workflow_dispatch:", workflow)
         self.assertNotIn("\n  push:\n", workflow)
         self.assertIn("sanitize_asr_report.py", workflow)
-        self.assertIn("--extra-report rms_normalized=normalized_metrics.json", workflow)
+        self.assertIn("--report whole=metrics.json", workflow)
+        self.assertIn("--report fixed_15s=chunked_15s_metrics.json", workflow)
+        self.assertIn("--report silence_aware_15s=silence_aware_15s_metrics.json", workflow)
+        self.assertIn("--report overlap_2s=overlap_2s_metrics.json", workflow)
+        self.assertIn("--report rms_normalized=normalized_metrics.json", workflow)
+        self.assertIn("if: success()", workflow)
         self.assertIn("public_metrics.json", workflow)
         self.assertIn("rm -rf tests/data/common_voice_ja/clips", workflow)
         self.assertIn("rm -rf downloads/mdc corpus", workflow)
