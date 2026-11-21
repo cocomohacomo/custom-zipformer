@@ -40,5 +40,24 @@ class SanitizeAsrReportTests(unittest.TestCase):
         self.assertNotIn("reference", safe["category_summary"]["short"])
 
 
+    def test_dataset_workflows_upload_only_sanitized_aggregate_reports(self):
+        root = Path(__file__).resolve().parents[1]
+        for dataset in ("jsut", "fleurs"):
+            with self.subTest(dataset=dataset):
+                workflow = (root / ".github" / "workflows" / f"validate-{dataset}.yml").read_text(encoding="utf-8")
+                self.assertIn("sanitize_asr_report.py", workflow)
+                self.assertIn("public_metrics.json", workflow)
+                self.assertIn(f"rm -rf tests/data/{dataset}_ja/clips", workflow)
+                self.assertIn(f"rm -f tests/data/{dataset}_ja/manifest.json", workflow)
+                self.assertIn(f"rm -f tests/data/{dataset}_ja/transcripts*.tsv", workflow)
+                self.assertIn(f"rm -f tests/data/{dataset}_ja/metrics*.json", workflow)
+                artifact = workflow.split("uses: actions/upload-artifact@v4", 1)[1]
+                artifact = artifact.split("retention-days:", 1)[0]
+                self.assertIn(f"path: tests/data/{dataset}_ja/public_metrics.json", artifact)
+                self.assertNotIn("mode_comparison.json", artifact)
+                self.assertNotIn("transcripts", artifact)
+                self.assertNotIn("manifest.json", artifact)
+
+
 if __name__ == "__main__":
     unittest.main()
