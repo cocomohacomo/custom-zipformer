@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import unittest
 
-from scripts.download_jsut_subset import classify, parse_transcripts
+from scripts.download_jsut_subset import SUBSET_ROOT, classify, parse_transcripts
 
 
 class JsutDatasetPreparationTests(unittest.TestCase):
+    def test_huggingface_mirror_root_matches_repository_tree(self):
+        self.assertEqual(SUBSET_ROOT, "basic5000")
+
     def test_parses_colon_inside_transcript(self):
         parsed = parse_transcripts(
             "BASIC5000_4501:だが、エーアイセンター稼動を快く思わない。\n"
