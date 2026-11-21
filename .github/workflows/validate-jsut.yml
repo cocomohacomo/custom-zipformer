@@ -137,6 +137,13 @@ jobs:
                   raise SystemExit(f"Invalid overlap offsets: {row['case_id']}")
               if any(b <= a for a, b in zip(starts, starts[1:])):
                   raise SystemExit(f"Non-increasing offsets: {row['case_id']}")
+              if row.get("overlap_merge_method") not in {"timestamp", "text_fallback"}:
+                  raise SystemExit(f"Missing overlap merge method diagnostic: {row['case_id']}")
+          methods = {}
+          for row in overlap:
+              method = row["overlap_merge_method"]
+              methods[method] = methods.get(method, 0) + 1
+          print(f"Overlap merge methods: {methods}")
           print(f"Validated {len(expected)} paired JSUT utterances across four inference modes.")
           PY
       - name: Upload metrics and transcripts only (not licensed audio)
