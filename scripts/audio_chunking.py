@@ -111,7 +111,7 @@ def merge_timestamped_chunks(
         except (TypeError, ValueError):
             return merge_overlapping_text([str(x.get("text", "")) for x in chunk_results]), "text_fallback"
         if any(value < 0 or value > chunk_durations_seconds[index] + 0.25 for value in times):
-            return "".join(str(x.get("text", "")).strip() for x in chunk_results), "text_fallback"
+            return merge_overlapping_text([str(x.get("text", "")) for x in chunk_results]), "text_fallback"
         if any(right < left for left, right in zip(times, times[1:])):
             return "".join(str(x.get("text", "")).strip() for x in chunk_results), "text_fallback"
         rendered = "".join(str(token).replace("▁", " ") for token in tokens)
