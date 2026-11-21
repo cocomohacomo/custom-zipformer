@@ -150,6 +150,9 @@ jobs:
         if: always()
         run: |
           python scripts/sanitize_asr_report.py --root tests/data/jsut_ja --comparison mode_comparison.json --output tests/data/jsut_ja/public_metrics.json
+      - name: Remove local licensed audio and raw reports
+        if: always()
+        run: |
           rm -rf tests/data/jsut_ja/clips
           rm -rf ~/.cache/huggingface/hub/datasets--FluidInference--JSUT-basic5000
           rm -f tests/data/jsut_ja/manifest.json tests/data/jsut_ja/transcripts*.tsv tests/data/jsut_ja/metrics*.stdout.json
