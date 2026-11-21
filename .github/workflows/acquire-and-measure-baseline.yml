@@ -209,12 +209,16 @@ jobs:
           print(f"Validated raw, normalized, fixed-chunk, silence-aware, and overlap metrics for {report['case_count']} clips.")
           PY
       - name: Sanitize output to aggregate-only metrics
-        if: always()
+        if: success()
         run: |
           python scripts/sanitize_asr_report.py \
             --root tests/data/common_voice_ja \
             --comparison mode_comparison.json \
-            --extra-report rms_normalized=normalized_metrics.json \
+            --report whole=metrics.json \
+            --report fixed_15s=chunked_15s_metrics.json \
+            --report silence_aware_15s=silence_aware_15s_metrics.json \
+            --report overlap_2s=overlap_2s_metrics.json \
+            --report rms_normalized=normalized_metrics.json \
             --output tests/data/common_voice_ja/public_metrics.json
       - name: Remove downloaded audio, cache, manifests, and raw reports
         if: always()
@@ -231,7 +235,7 @@ jobs:
           rm -f tests/data/common_voice_ja/*.stdout.json
           rm -f tests/data/common_voice_ja/mode_comparison.json
       - name: Upload sanitized aggregate metrics only
-        if: always()
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: japanese-zipformer-aggregate-${{ github.run_id }}
