@@ -124,10 +124,55 @@ def sanitize_comparisons(comparison: dict) -> dict:
     return paired
 
 
+
+def sanitize_execution_diagnostics(report: dict) -> dict:
+    """Allowlist aggregate-only runtime diagnostics; never copy arbitrary input keys."""
+    if not isinstance(report, dict) or not isinstance(report.get("modes"), dict):
+        return {}
+    output = {}
+    for mode in sorted(ALLOWED_MODES.intersection(report["modes"])):
+        item = report["modes"].get(mode)
+        if not isinstance(item, dict):
+            continue
+        duration = item.get("audio_duration_seconds")
+        chunking = item.get("chunking")
+        if not isinstance(duration, dict) or not isinstance(chunking, dict):
+            continue
+        clean_duration = {
+            key: _number(duration.get(key))
+            for key in ("min", "median", "max")
+        }
+        clean_chunking = {
+            key: _number(chunking.get(key), integer=(key != "multi_chunk_case_rate"), nonnegative=True)
+            for key in (
+                "single_chunk_cases", "multi_chunk_cases", "multi_chunk_case_rate",
+                "total_chunks", "max_chunks_per_case", "short_chunks_lt_25ms", "silent_chunks",
+            )
+        }
+        if any(value is None for value in clean_duration.values()) or any(
+            value is None for value in clean_chunking.values()
+        ):
+            continue
+        clean = {
+            "case_count": _number(item.get("case_count"), integer=True, nonnegative=True),
+            "audio_duration_seconds": clean_duration,
+            "chunking": clean_chunking,
+        }
+        methods = item.get("overlap_merge_methods")
+        if isinstance(methods, dict):
+            clean["overlap_merge_methods"] = {
+                key: _number(methods.get(key), integer=True, nonnegative=True)
+                for key in ("timestamp", "text_fallback")
+                if _number(methods.get(key), integer=True, nonnegative=True) is not None
+            }
+        output[mode] = clean
+    return output
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--comparison", default="mode_comparison.json")
+    parser.add_argument("--diagnostics", default=None, help="Optional aggregate-only execution diagnostics JSON")
     parser.add_argument(
         "--report", action="append", default=[], metavar="NAME=PATH",
         help="Explicit metric report mapping; when supplied, all four core modes are required.",
@@ -169,6 +214,9 @@ def main() -> int:
         "modes": aggregate,
         "paired_comparisons": sanitize_comparisons(comparison),
     }
+    if args.diagnostics:
+        diagnostics = json.loads((args.root / args.diagnostics).read_text(encoding="utf-8"))
+        output["execution_diagnostics"] = sanitize_execution_diagnostics(diagnostics)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(output, ensure_ascii=False, indent=2) + chr(10), encoding="utf-8")
     print(json.dumps({"output": str(args.output), "mode_count": len(aggregate)}, ensure_ascii=False))
