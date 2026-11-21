@@ -12,6 +12,7 @@ on:
     paths:
       - ".github/workflows/acquire-and-measure-baseline.yml"
       - "scripts/run_sherpa_zipformer.py"
+      - "scripts/audio_chunking.py"
       - "scripts/prepare_common_voice_baseline.py"
       - "scripts/deletion_metrics.py"
 
