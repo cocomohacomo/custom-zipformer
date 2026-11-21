@@ -69,7 +69,7 @@ class ValidateAsrEvaluationTests(unittest.TestCase):
             root = Path(directory)
             self._write_fixture(root)
             path = root / MODES["fixed_15s"][0]
-            content = path.read_text(encoding="utf-8").replace("\\t30.0\\t", "\\t8.0\\t").replace("\\t2\\t", "\\t1\\t")
+            content = path.read_text(encoding="utf-8").replace("\\t2\\t", "\\t1\\t", 2)
             path.write_text(content, encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "fixed chunk count"):
                 validate_evaluation(root)
