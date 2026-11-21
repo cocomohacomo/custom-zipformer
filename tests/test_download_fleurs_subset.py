@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import contextlib
 import csv
+import io
 import json
 import sys
 import tarfile
@@ -44,6 +46,16 @@ class FleursSubsetTests(unittest.TestCase):
                 fleurs.read_rows(path)
             self.assertNotIn("PRIVATE_FLEURS_FILE.wav", str(caught.exception))
 
+
+    def test_main_suppresses_downloader_exception_details(self):
+        output = io.StringIO()
+        with patch.object(sys, "argv", ["download_fleurs_subset.py", "--limit", "1"]), \
+             patch.object(fleurs, "prepare_dataset", side_effect=RuntimeError("PRIVATE_FLEURS_ID transcript.wav")), \
+             contextlib.redirect_stdout(output):
+            result = fleurs.main()
+        self.assertEqual(result, 1)
+        self.assertNotIn("PRIVATE_FLEURS_ID", output.getvalue())
+        self.assertNotIn("transcript.wav", output.getvalue())
 
     def test_prepare_dataset_extracts_only_selected_audio(self):
         with tempfile.TemporaryDirectory() as directory:
