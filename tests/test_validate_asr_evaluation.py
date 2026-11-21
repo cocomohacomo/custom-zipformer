@@ -21,7 +21,7 @@ class ValidateAsrEvaluationTests(unittest.TestCase):
         for mode, (transcript_name, metrics_name) in MODES.items():
             with (root / transcript_name).open("w", encoding="utf-8", newline="") as stream:
                 writer = csv.DictWriter(stream, fieldnames=[
-                    "case_id", "hypothesis", "audio_duration_seconds", "inference_chunks",
+                    "case_id", "reference", "hypothesis", "audio_duration_seconds", "inference_chunks",
                     "inference_short_chunks_lt_25ms", "inference_silent_chunks",
                     "chunk_boundaries_seconds", "chunk_start_offsets_seconds", "overlap_merge_method",
                 ], delimiter="\t")
@@ -29,6 +29,7 @@ class ValidateAsrEvaluationTests(unittest.TestCase):
                 for index, case_id in enumerate(ids):
                     writer.writerow({
                         "case_id": case_id,
+                        "reference": "これは同一の参照文です",
                         "hypothesis": "" if index == 0 else "認識結果",
                         "audio_duration_seconds": "30.0",
                         "inference_chunks": "1" if mode == "whole" else "2",
@@ -63,6 +64,22 @@ class ValidateAsrEvaluationTests(unittest.TestCase):
             self.assertEqual(result["modes"]["fixed_15s"]["chunking"]["multi_chunk_cases"], 2)
             self.assertEqual(result["modes"]["silence_aware_15s"]["chunking"]["total_chunks"], 4)
 
+
+
+    def test_reference_transcripts_must_match_exactly_across_modes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self._write_fixture(root)
+            path = root / MODES["fixed_15s"][0]
+            with path.open(encoding="utf-8", newline="") as stream:
+                rows = list(csv.DictReader(stream, delimiter=chr(9)))
+            rows[0]["reference"] = "これは別の参照文です"
+            with path.open("w", encoding="utf-8", newline="") as stream:
+                writer = csv.DictWriter(stream, fieldnames=list(rows[0]), delimiter=chr(9))
+                writer.writeheader()
+                writer.writerows(rows)
+            with self.assertRaisesRegex(ValueError, "reference transcripts differ"):
+                validate_evaluation(root)
 
     def test_short_audio_chunking_diagnostics_detects_missing_split(self):
         with tempfile.TemporaryDirectory() as directory:
