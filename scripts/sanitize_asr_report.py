@@ -40,6 +40,8 @@ def _number(value: object, *, integer: bool = False, nonnegative: bool = False):
         result = value
     if (isinstance(result, float) and not math.isfinite(result)) or (nonnegative and result < 0):
         return None
+    if isinstance(result, int) and abs(result) > 10**12:
+        return None
     return result
 
 
