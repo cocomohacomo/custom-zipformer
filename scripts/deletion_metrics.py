@@ -117,14 +117,14 @@ def main() -> int:
         for field in ("audio_duration_seconds", "audio_rms", "audio_peak",
                       "near_silence_fraction", "clipping_fraction",
                       "source_sample_rate", "source_channels", "applied_gain_db",
-                      "inference_audio_rms"):
+                      "inference_audio_rms", "overlap_merge_method"):
             if row.get(field, "").strip():
                 try:
                     item[field] = float(row[field]) if field in {
                         "audio_duration_seconds", "audio_rms", "audio_peak",
                         "near_silence_fraction", "clipping_fraction",
                         "applied_gain_db", "inference_audio_rms"
-                    } else int(row[field])
+                    } else int(row[field]) if field != "overlap_merge_method" else row[field]
                 except ValueError:
                     item[field] = row[field]
         per_case.append(item)
