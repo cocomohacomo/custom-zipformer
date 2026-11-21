@@ -117,7 +117,7 @@ def validate_evaluation(root: Path) -> dict:
                 if chunk_count < 1 or len(starts) != chunk_count or not starts or starts[0] != 0.0:
                     raise ValueError("Overlap chunk offsets do not match the chunk count")
                 if any(not math.isfinite(value) or value < 0 for value in starts):
-                    raise ValueError("Overlap chunk offsets contain invalid values")
+                    raise ValueError("Overlap chunk offsets contain non-finite or negative values")
                 if any(right <= left for left, right in zip(starts, starts[1:])):
                     raise ValueError("Overlap chunk offsets are not strictly increasing")
                 if row.get("overlap_merge_method") not in {"timestamp", "text_fallback"}:
