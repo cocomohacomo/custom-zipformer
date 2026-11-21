@@ -53,8 +53,8 @@ class SanitizeAsrReportTests(unittest.TestCase):
                 self.assertIn(f"rm -rf tests/data/{dataset}_ja/clips", workflow)
                 self.assertIn(f"rm -f tests/data/{dataset}_ja/manifest.json", workflow)
                 self.assertIn(f"transcripts*.tsv", workflow)
-                if dataset == "fleurs":
-                    self.assertIn(f"metrics*.json", workflow)
+                self.assertIn("metrics*.json", workflow)
+                self.assertIn("mode_comparison.json", workflow)
                 artifact = workflow.split("uses: actions/upload-artifact@v4", 1)[1]
                 artifact = artifact.split("retention-days:", 1)[0]
                 self.assertIn(f"path: tests/data/{dataset}_ja/public_metrics.json", artifact)
