@@ -49,8 +49,12 @@ class FleursSubsetTests(unittest.TestCase):
 
     def test_main_suppresses_downloader_exception_details(self):
         output = io.StringIO()
+        def noisy_failure(*args, **kwargs):
+            print("PRIVATE_FLEURS_ID transcript.wav")
+            print("PRIVATE_FLEURS_ID transcript.wav", file=sys.stderr)
+            raise RuntimeError("PRIVATE_FLEURS_ID transcript.wav")
         with patch.object(sys, "argv", ["download_fleurs_subset.py", "--limit", "1"]), \
-             patch.object(fleurs, "prepare_dataset", side_effect=RuntimeError("PRIVATE_FLEURS_ID transcript.wav")), \
+             patch.object(fleurs, "prepare_dataset", side_effect=noisy_failure), \
              contextlib.redirect_stdout(output):
             result = fleurs.main()
         self.assertEqual(result, 1)
