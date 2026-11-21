@@ -127,6 +127,10 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--comparison", default="mode_comparison.json")
+    parser.add_argument(
+        "--report", action="append", default=[], metavar="NAME=PATH",
+        help="Explicit metric report mapping; when supplied, all four core modes are required.",
+    )
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument(
         "--extra-report", action="append", default=[], metavar="NAME=PATH",
@@ -134,7 +138,20 @@ def main() -> int:
     )
     args = parser.parse_args()
     aggregate = {}
-    for mode, filename in METRIC_FILES.items():
+    report_files = dict(METRIC_FILES)
+    if args.report:
+        report_files = {}
+        for value in args.report:
+            if "=" not in value:
+                parser.error(f"Invalid --report {value!r}; expected NAME=PATH")
+            name, filename = value.split("=", 1)
+            if name not in ALLOWED_MODES or not filename or name in report_files:
+                parser.error("Unsupported, empty, or duplicate --report mapping")
+            report_files[name] = filename
+        missing = set(METRIC_FILES) - set(report_files)
+        if missing:
+            parser.error("Missing required report modes: " + ", ".join(sorted(missing)))
+    for mode, filename in report_files.items():
         report = json.loads((args.root / filename).read_text(encoding="utf-8"))
         aggregate[mode] = sanitize_metrics(report)
     for value in args.extra_report:
