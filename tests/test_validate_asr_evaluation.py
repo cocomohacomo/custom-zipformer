@@ -22,7 +22,7 @@ class ValidateAsrEvaluationTests(unittest.TestCase):
             with (root / transcript_name).open("w", encoding="utf-8", newline="") as stream:
                 writer = csv.DictWriter(stream, fieldnames=[
                     "case_id", "reference", "hypothesis", "audio_duration_seconds", "inference_chunks",
-                    "inference_short_chunks_lt_25ms", "inference_silent_chunks",
+                    "inference_empty_chunks", "inference_short_chunks_lt_25ms", "inference_silent_chunks",
                     "chunk_boundaries_seconds", "chunk_start_offsets_seconds", "overlap_merge_method",
                 ], delimiter="\t")
                 writer.writeheader()
@@ -33,6 +33,7 @@ class ValidateAsrEvaluationTests(unittest.TestCase):
                         "hypothesis": "" if index == 0 else "認識結果",
                         "audio_duration_seconds": "30.0",
                         "inference_chunks": "1" if mode == "whole" else "2",
+                        "inference_empty_chunks": "1" if index == 0 else "0",
                         "inference_short_chunks_lt_25ms": "0",
                         "inference_silent_chunks": "0",
                         "chunk_boundaries_seconds": "15.0" if mode == "silence_aware_15s" else "",
@@ -63,6 +64,8 @@ class ValidateAsrEvaluationTests(unittest.TestCase):
             self.assertEqual(result["modes"]["whole"]["chunking"]["multi_chunk_cases"], 0)
             self.assertEqual(result["modes"]["fixed_15s"]["chunking"]["multi_chunk_cases"], 2)
             self.assertEqual(result["modes"]["silence_aware_15s"]["chunking"]["total_chunks"], 4)
+            self.assertEqual(result["modes"]["whole"]["chunking"]["empty_output_chunks"], 1)
+            self.assertEqual(result["modes"]["whole"]["chunking"]["empty_output_chunk_rate"], 0.5)
 
 
 
