@@ -155,7 +155,9 @@ jobs:
         run: |
           rm -rf tests/data/jsut_ja/clips
           rm -rf ~/.cache/huggingface/hub/datasets--FluidInference--JSUT-basic5000
-          rm -f tests/data/jsut_ja/manifest.json tests/data/jsut_ja/transcripts*.tsv tests/data/jsut_ja/metrics*.stdout.json
+          rm -f tests/data/jsut_ja/manifest.json tests/data/jsut_ja/transcripts*.tsv
+          rm -f tests/data/jsut_ja/metrics*.stdout.json tests/data/jsut_ja/metrics*.json
+          rm -f tests/data/jsut_ja/mode_comparison.json
       - name: Upload sanitized aggregate metrics only
         if: always()
         uses: actions/upload-artifact@v4
