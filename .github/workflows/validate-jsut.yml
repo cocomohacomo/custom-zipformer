@@ -77,6 +77,14 @@ jobs:
           for mode in "" "_chunked_15s" "_silence_aware_15s" "_overlap_2s"; do
             python scripts/deletion_metrics.py "tests/data/jsut_ja/transcripts${mode}.tsv" --output-json "tests/data/jsut_ja/metrics${mode}.json" > "tests/data/jsut_ja/metrics${mode}.stdout.json"
           done
+      - name: Compare paired inference modes
+        run: |
+          python scripts/compare_asr_modes.py \
+            --report whole=tests/data/jsut_ja/metrics.json \
+            --report fixed_15s=tests/data/jsut_ja/metrics_chunked_15s.json \
+            --report silence_aware=tests/data/jsut_ja/metrics_silence_aware_15s.json \
+            --report overlap_2s=tests/data/jsut_ja/metrics_overlap_2s.json \
+            --output-json tests/data/jsut_ja/mode_comparison.json
       - name: Fail on complete, near-complete, or severe deletion
         run: |
           python - <<'PY'
@@ -140,6 +148,7 @@ jobs:
             tests/data/jsut_ja/manifest.json
             tests/data/jsut_ja/transcripts*.tsv
             tests/data/jsut_ja/metrics*.json
+            tests/data/jsut_ja/mode_comparison.json
           if-no-files-found: warn
           retention-days: 30
   license-not-acknowledged:
