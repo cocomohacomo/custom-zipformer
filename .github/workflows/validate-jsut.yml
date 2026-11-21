@@ -107,7 +107,7 @@ jobs:
             --report overlap_2s=tests/data/jsut_ja/metrics_overlap_2s.json \
             --output-json tests/data/jsut_ja/mode_comparison.json
       - name: Validate paired inference outputs and report omissions
-        run: python scripts/validate_asr_evaluation.py --root tests/data/jsut_ja
+        run: python scripts/validate_asr_evaluation.py --root tests/data/jsut_ja --output-json tests/data/jsut_ja/execution_diagnostics.json
       - name: Sanitize output to aggregate-only metrics
         if: success()
         run: |
@@ -124,7 +124,7 @@ jobs:
           rm -rf ~/.cache/huggingface/hub/datasets--FluidInference--JSUT-basic5000
           rm -f tests/data/jsut_ja/manifest.json tests/data/jsut_ja/transcripts*.tsv
           rm -f tests/data/jsut_ja/metrics*.stdout.json tests/data/jsut_ja/metrics*.json
-          rm -f tests/data/jsut_ja/mode_comparison.json
+          rm -f tests/data/jsut_ja/mode_comparison.json tests/data/jsut_ja/execution_diagnostics.json
           rm -rf downloads models/zipformer-ja
       - name: Upload sanitized aggregate metrics only
         if: success()
