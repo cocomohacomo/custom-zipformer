@@ -31,6 +31,13 @@ class SilenceAwareChunkingTests(unittest.TestCase):
         self.assertEqual(chunks, [])
         self.assertEqual(boundaries, [])
 
+    def test_rejects_non_finite_waveform_samples(self):
+        for bad_value in (float("nan"), float("inf"), float("-inf")):
+            with self.subTest(value=bad_value):
+                x = np.array([0.0, bad_value, 0.0], dtype=np.float32)
+                with self.assertRaisesRegex(ValueError, "finite"):
+                    split_at_low_energy(x, 16000, 1)
+
     def test_rejects_stereo_input(self):
         with self.assertRaises(ValueError):
             split_at_low_energy(np.zeros((100, 2)), 16000, 15)
@@ -43,6 +50,11 @@ class OverlapChunkingTests(unittest.TestCase):
         self.assertEqual(starts, [3.0, 6.0])
         self.assertEqual(len(chunks), 3)
         np.testing.assert_array_equal(chunks[0][-1000:], chunks[1][:1000])
+
+    def test_overlap_split_rejects_non_finite_waveform_samples(self):
+        x = np.array([0.0, np.nan, 0.0], dtype=np.float32)
+        with self.assertRaisesRegex(ValueError, "finite"):
+            split_with_overlap(x, 16000, 1, 0.1)
 
     def test_invalid_overlap_is_rejected(self):
         with self.assertRaises(ValueError):
