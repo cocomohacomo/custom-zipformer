@@ -18,7 +18,8 @@ def write_report(path: Path, rows: list[dict], cer: float) -> None:
 def case(case_id: str, deletions: int) -> dict:
     return {
         "case_id": case_id,
-        "char": {"deletions": deletions},
+        "category": "short",
+        "char": {"deletions": deletions, "reference_units": 20},
         "complete_omission": False,
         "near_complete_omission": False,
         "severe_deletion": deletions >= 5,
@@ -48,6 +49,26 @@ class CompareAsrModesTests(unittest.TestCase):
             write_report(candidate, [case("b", 1)], 0.1)
             with self.assertRaisesRegex(ValueError, "case set mismatch"):
                 compare_reports([("whole", base), ("chunked", candidate)])
+
+    def test_rejects_reference_length_mismatch_for_same_case_id(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            base, candidate = root / "base.json", root / "candidate.json"
+            baseline_case = case("same-id", 1)
+            candidate_case = case("same-id", 2)
+            candidate_case["char"]["reference_units"] = 21
+            write_report(base, [baseline_case], 0.1)
+            write_report(candidate, [candidate_case], 0.2)
+            with self.assertRaisesRegex(ValueError, "reference length mismatch"):
+                compare_reports([("whole", base), ("chunked", candidate)])
+
+    def test_rejects_duplicate_mode_names(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            report = root / "report.json"
+            write_report(report, [case("a", 1)], 0.1)
+            with self.assertRaisesRegex(ValueError, "unique"):
+                compare_reports([("same", report), ("same", report)])
 
     def test_rejects_duplicate_case_ids(self):
         with tempfile.TemporaryDirectory() as tmp:
