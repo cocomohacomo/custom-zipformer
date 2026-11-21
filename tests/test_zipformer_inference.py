@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-import importlib.util
+import sys
+import types
 import unittest
 from pathlib import Path
 
@@ -23,10 +24,29 @@ class ZipformerInferenceSourceTests(unittest.TestCase):
         prepared = prepare_inference_audio(np.column_stack((left, right)), 16000)
         np.testing.assert_allclose(prepared, 0.3, atol=1e-6)
 
-    @unittest.skipUnless(importlib.util.find_spec("scipy"), "scipy is an inference dependency")
-    def test_resampling_produces_expected_frame_count(self):
+    def test_resampling_calls_polyphase_converter_with_expected_ratio(self):
         source = np.sin(np.linspace(0, 10 * np.pi, 4410, dtype=np.float32))
-        prepared = prepare_inference_audio(source, 44100, 16000)
+        scipy_module = types.ModuleType("scipy")
+        signal_module = types.ModuleType("scipy.signal")
+        calls = []
+        def fake_resample_poly(values, up, down):
+            calls.append((up, down))
+            count = (len(values) * up + down - 1) // down
+            return np.zeros(count, dtype=np.float32)
+        signal_module.resample_poly = fake_resample_poly
+        scipy_module.signal = signal_module
+        old_modules = {key: sys.modules.get(key) for key in ("scipy", "scipy.signal")}
+        try:
+            sys.modules["scipy"] = scipy_module
+            sys.modules["scipy.signal"] = signal_module
+            prepared = prepare_inference_audio(source, 44100, 16000)
+        finally:
+            for key, old_module in old_modules.items():
+                if old_module is None:
+                    sys.modules.pop(key, None)
+                else:
+                    sys.modules[key] = old_module
+        self.assertEqual(calls, [(160, 441)])
         self.assertEqual(len(prepared), 1600)
         self.assertEqual(prepared.dtype, np.float32)
         self.assertTrue(np.isfinite(prepared).all())
