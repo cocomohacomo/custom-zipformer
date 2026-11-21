@@ -215,7 +215,7 @@ def main() -> int:
     rendered = json.dumps(result, ensure_ascii=False, sort_keys=True)
     if args.output_json is not None:
         args.output_json.parent.mkdir(parents=True, exist_ok=True)
-        args.output_json.write_text(rendered + "\\n", encoding="utf-8")
+        args.output_json.write_text(rendered + chr(10), encoding="utf-8")
     print(rendered)
     return 0
 
