@@ -149,7 +149,9 @@ class SanitizeAsrReportTests(unittest.TestCase):
         for dataset in ("jsut", "fleurs"):
             with self.subTest(dataset=dataset):
                 workflow = (root / ".github" / "workflows" / f"validate-{dataset}.yml").read_text(encoding="utf-8")
-                self.assertIn("sanitize_asr_report.py", workflow)
+                self.assertIn("workflow_dispatch:", workflow)
+        self.assertNotIn("\n  push:\n", workflow)
+        self.assertIn("sanitize_asr_report.py", workflow)
                 self.assertIn("public_metrics.json", workflow)
                 self.assertIn("workflow_dispatch:", workflow)
                 self.assertIn("acknowledge_license", workflow)
