@@ -17,6 +17,7 @@ COUNT_KEYS = {
 }
 RATE_KEYS = {"cer", "deletion_rate", "insertion_rate", "substitution_rate"}
 CATEGORY_METRIC_KEYS = tuple(sorted(COUNT_KEYS | RATE_KEYS))
+ALLOWED_MODES = set(METRIC_FILES) | {"rms_normalized"}
 
 METRIC_FILES = {
     "whole": "metrics.json",
@@ -105,14 +106,14 @@ def sanitize_comparisons(comparison: dict) -> dict:
     if not isinstance(raw, dict):
         return {}
     paired = {}
-    allowed_modes = set(METRIC_FILES) - {"whole"}
+    allowed_modes = ALLOWED_MODES - {"whole"}
     for mode in sorted(allowed_modes.intersection(raw)):
         item = raw.get(mode)
         if not isinstance(item, dict):
             continue
         baseline = item.get("baseline")
         paired[mode] = {
-            "baseline": baseline if isinstance(baseline, str) and baseline in METRIC_FILES else None,
+            "baseline": baseline if isinstance(baseline, str) and baseline in ALLOWED_MODES else None,
             "deletion_delta": _number(item.get("deletion_delta"), integer=True),
             "cer_delta": _number(item.get("cer_delta")),
             "cases_with_fewer_deletions": _number(item.get("cases_with_fewer_deletions"), integer=True, nonnegative=True),
@@ -127,11 +128,23 @@ def main() -> int:
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--comparison", default="mode_comparison.json")
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument(
+        "--extra-report", action="append", default=[], metavar="NAME=PATH",
+        help="Optional aggregate report inside --root; repeat as needed.",
+    )
     args = parser.parse_args()
     aggregate = {}
     for mode, filename in METRIC_FILES.items():
         report = json.loads((args.root / filename).read_text(encoding="utf-8"))
         aggregate[mode] = sanitize_metrics(report)
+    for value in args.extra_report:
+        if "=" not in value:
+            parser.error(f"Invalid --extra-report {value!r}; expected NAME=PATH")
+        name, filename = value.split("=", 1)
+        if name not in ({"rms_normalized"} - set(aggregate)) or not filename:
+            parser.error("Unsupported or duplicate --extra-report name")
+        report = json.loads((args.root / filename).read_text(encoding="utf-8"))
+        aggregate[name] = sanitize_metrics(report)
     comparison = json.loads((args.root / args.comparison).read_text(encoding="utf-8"))
     output = {
         "privacy_policy": "aggregate metrics only; no audio, transcripts, manifests, or utterance identifiers",
