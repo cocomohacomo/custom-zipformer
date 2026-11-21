@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 import numpy as np
 
-from scripts.audio_chunking import merge_overlapping_text, split_at_low_energy, split_with_overlap
+from scripts.audio_chunking import merge_overlapping_text, merge_timestamped_chunks, split_at_low_energy, split_with_overlap
 
 
 class SilenceAwareChunkingTests(unittest.TestCase):
@@ -83,6 +83,33 @@ class OverlapChunkingTests(unittest.TestCase):
 
     def test_custom_minimum_overlap_is_honored(self):
         self.assertEqual(merge_overlapping_text(["abcdef", "defghi"], min_overlap_chars=3), "abcdefghi")
+
+
+    def test_timestamp_merge_assigns_overlap_to_midpoint(self):
+        results = [
+            {"text": "abcdef", "tokens": list("abcdef"), "timestamps": [0, 1, 2, 3, 4, 5]},
+            {"text": "defghi", "tokens": list("defghi"), "timestamps": [0, 1, 2, 3, 4, 5]},
+        ]
+        merged, method = merge_timestamped_chunks(results, [0.0, 4.0], [6.0, 6.0])
+        self.assertEqual(merged, "abcdefghi")
+        self.assertEqual(method, "timestamp")
+
+    def test_timestamp_merge_falls_back_when_tokens_do_not_reconstruct_text(self):
+        results = [
+            {"text": "今日はとても晴れ", "tokens": ["今日は", "晴れ"], "timestamps": [0, 1]},
+            {"text": "とても晴れですね", "tokens": ["晴れ", "ですね"], "timestamps": [0, 1]},
+        ]
+        merged, method = merge_timestamped_chunks(results, [0.0, 4.0], [6.0, 6.0])
+        self.assertEqual(merged, "今日はとても晴れですね")
+        self.assertEqual(method, "text_fallback")
+
+    def test_timestamp_merge_falls_back_on_non_monotonic_times(self):
+        results = [
+            {"text": "abc", "tokens": list("abc"), "timestamps": [0, 2, 1]},
+        ]
+        merged, method = merge_timestamped_chunks(results, [0.0], [3.0])
+        self.assertEqual(merged, "abc")
+        self.assertEqual(method, "text_fallback")
 
 
 if __name__ == "__main__":
