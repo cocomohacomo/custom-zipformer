@@ -77,6 +77,33 @@ jobs:
           for mode in "" "_chunked_15s" "_silence_aware_15s" "_overlap_2s"; do
             python scripts/deletion_metrics.py "tests/data/jsut_ja/transcripts${mode}.tsv" --output-json "tests/data/jsut_ja/metrics${mode}.json" > "tests/data/jsut_ja/metrics${mode}.stdout.json"
           done
+      - name: Fail on complete, near-complete, or severe deletion
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root = Path("tests/data/jsut_ja")
+          failures = []
+          for mode in ("", "_chunked_15s", "_silence_aware_15s", "_overlap_2s"):
+              report = json.loads((root / f"metrics{mode}.json").read_text(encoding="utf-8"))
+              cases = report.get("cases", [])
+              flagged = [
+                  item["case_id"] for item in cases
+                  if item.get("complete_omission")
+                  or item.get("near_complete_omission")
+                  or item.get("severe_deletion")
+              ]
+              print(
+                  f"{mode or 'whole'}: complete={report.get('complete_omission', {}).get('empty_hypothesis_count', 0)}, "
+                  f"near-complete={report.get('near_complete_omission', {}).get('count', 0)}, "
+                  f"severe={report.get('severe_deletion', {}).get('count', 0)}"
+              )
+              if flagged:
+                  failures.append(f"{mode or 'whole'}: {', '.join(flagged)}")
+          if failures:
+              raise SystemExit("Omission quality gate failed:\\n" + "\\n".join(failures))
+          print("No complete, near-complete, or severe deletions detected in any inference mode.")
+          PY
       - name: Validate paired outputs and chunk coverage diagnostics
         run: |
           python - <<'PY'
