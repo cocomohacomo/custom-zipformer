@@ -52,7 +52,7 @@ def read_rows(path: Path) -> list[dict[str, str]]:
         if not name or name != row["file_name"] or not text:
             continue
         if name in unique:
-            raise ValueError(f"Duplicate FLEURS audio filename: {name}")
+            raise ValueError("Duplicate FLEURS audio filename")
         row["file_name"] = name
         row["transcription"] = text
         unique[name] = row
@@ -84,7 +84,7 @@ def prepare_dataset(limit: int, output: Path, seed: int = 270021) -> dict:
             if buckets[category] and len(selected) < min(limit, len(rows)):
                 selected.append((category, buckets[category].pop()))
     if not selected:
-        raise SystemExit("No FLEURS utterances selected")
+        raise ValueError("No FLEURS utterances selected")
 
     archive_path = Path(hf_hub_download(
         repo_id=REPO_ID, repo_type="dataset", filename=AUDIO_ARCHIVE
@@ -99,10 +99,10 @@ def prepare_dataset(limit: int, output: Path, seed: int = 270021) -> dict:
             if basename not in wanted:
                 continue
             if not member.isfile() or basename in extracted:
-                raise ValueError(f"Unexpected duplicate/non-file archive member: {member.name}")
+                raise ValueError("Unexpected duplicate or non-file archive member")
             source = archive.extractfile(member)
             if source is None:
-                raise ValueError(f"Cannot read archive member: {member.name}")
+                raise ValueError("Cannot read selected archive member")
             target = clips_dir / basename
             with source, target.open("wb") as destination:
                 shutil.copyfileobj(source, destination)
@@ -112,7 +112,7 @@ def prepare_dataset(limit: int, output: Path, seed: int = 270021) -> dict:
 
     missing = sorted(wanted - extracted.keys())
     if missing:
-        raise SystemExit(f"FLEURS archive missing {len(missing)} selected files: {missing[:5]}")
+        raise ValueError(f"FLEURS archive is missing {len(missing)} selected files")
 
     manifest = []
     for index, (category, row) in enumerate(selected):
@@ -161,7 +161,11 @@ def main() -> int:
     args = parser.parse_args()
     if args.limit < 1 or args.limit > 500:
         parser.error("--limit must be between 1 and 500")
-    metadata = prepare_dataset(args.limit, args.output, args.seed)
+    try:
+        metadata = prepare_dataset(args.limit, args.output, args.seed)
+    except Exception:
+        print("FLEURS dataset preparation failed; detailed source information is suppressed.")
+        return 1
     print(json.dumps({
         "dataset": metadata["dataset_id"],
         "split": metadata["split"],
