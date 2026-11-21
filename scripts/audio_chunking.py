@@ -21,6 +21,8 @@ def split_at_low_energy(
     x = np.asarray(samples)
     if x.ndim != 1:
         raise ValueError("samples must be mono (1-D)")
+    if np.issubdtype(x.dtype, np.inexact) and not np.isfinite(x).all():
+        raise ValueError("samples must contain only finite values")
     if sample_rate <= 0 or target_seconds <= 0 or frame_seconds <= 0:
         raise ValueError("sample_rate, target_seconds, and frame_seconds must be positive")
     if search_window_seconds < 0 or min_chunk_seconds <= 0:
@@ -63,6 +65,8 @@ def split_with_overlap(samples: np.ndarray, sample_rate: int, chunk_seconds: flo
     x = np.asarray(samples)
     if x.ndim != 1:
         raise ValueError("samples must be mono (1-D)")
+    if np.issubdtype(x.dtype, np.inexact) and not np.isfinite(x).all():
+        raise ValueError("samples must contain only finite values")
     if sample_rate <= 0 or chunk_seconds <= 0:
         raise ValueError("sample_rate and chunk_seconds must be positive")
     if overlap_seconds < 0 or overlap_seconds >= chunk_seconds:
