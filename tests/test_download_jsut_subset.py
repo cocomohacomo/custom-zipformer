@@ -1,7 +1,12 @@
 from __future__ import annotations
 
+import contextlib
+import io
+import sys
 import unittest
+from unittest.mock import patch
 
+from scripts import download_jsut_subset as jsut
 from scripts.download_jsut_subset import SUBSET_ROOT, classify, parse_transcripts
 
 
@@ -30,6 +35,16 @@ class JsutDatasetPreparationTests(unittest.TestCase):
             parse_transcripts("PRIVATE_JSUT_ID:文章\nPRIVATE_JSUT_ID:重複")
         self.assertNotIn("PRIVATE_JSUT_ID", str(caught.exception))
 
+
+    def test_main_suppresses_downloader_exception_details(self):
+        output = io.StringIO()
+        with patch.object(sys, "argv", ["download_jsut_subset.py", "--limit", "1"]), \
+             patch.object(jsut, "prepare_dataset", side_effect=RuntimeError("PRIVATE_JSUT_ID transcript.wav")), \
+             contextlib.redirect_stdout(output):
+            result = jsut.main()
+        self.assertEqual(result, 1)
+        self.assertNotIn("PRIVATE_JSUT_ID", output.getvalue())
+        self.assertNotIn("transcript.wav", output.getvalue())
 
     def test_length_categories(self):
         self.assertEqual(classify("短文です。"), "short")
