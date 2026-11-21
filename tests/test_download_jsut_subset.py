@@ -25,7 +25,7 @@ class JsutDatasetPreparationTests(unittest.TestCase):
     def test_length_categories(self):
         self.assertEqual(classify("短文です。"), "short")
         self.assertEqual(classify("これは中くらいの長さの評価用文章です。"), "medium")
-        self.assertEqual(classify("これは長文の欠落を検出するために用意した十分に長い評価用の日本語文章です。"), "long")
+        self.assertEqual(classify("これは長文の欠落を確実に検出するために用意した、音声認識の評価に使用する十分に長い日本語のテスト文章です。"), "long")
 
 
 if __name__ == "__main__":
