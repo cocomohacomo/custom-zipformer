@@ -14,7 +14,7 @@ import shutil
 from pathlib import Path
 
 REPO_ID = "FluidInference/JSUT-basic5000"
-SUBSET_ROOT = "jsut_ver1.1/basic5000"
+SUBSET_ROOT = "basic5000"
 
 
 def parse_transcripts(text: str) -> dict[str, str]:
@@ -126,8 +126,8 @@ def main() -> int:
     parser.add_argument("--seed", type=int, default=270021)
     parser.add_argument("--output", type=Path, default=Path("tests/data/jsut_ja"))
     args = parser.parse_args()
-    if args.limit < 1:
-        parser.error("--limit must be >= 1")
+    if not 1 <= args.limit <= 500:
+        parser.error("--limit must be between 1 and 500")
     metadata = prepare_dataset(args.limit, args.output, args.seed)
     print(json.dumps({
         "dataset": metadata["dataset_id"],
