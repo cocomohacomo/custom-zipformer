@@ -18,20 +18,22 @@ from pathlib import Path
 REPO_ID = "FluidInference/JSUT-basic5000"
 SUBSET_ROOT = "basic5000"
 SUBSET_ROOT_CANDIDATES = ("basic5000", "jsut_ver1.1/basic5000")
+TRANSCRIPT_FILENAME_CANDIDATES = ("transcript_utf8.txt", "transcripts_utf8.txt")
 
 
 def locate_jsut_transcripts(hf_hub_download):
     """Resolve the mirror's actual file layout without exposing lookup errors."""
     for root in SUBSET_ROOT_CANDIDATES:
-        try:
-            path = hf_hub_download(
-                repo_id=REPO_ID,
-                repo_type="dataset",
-                filename=f"{root}/transcript_utf8.txt",
-            )
-            return Path(path), root
-        except Exception:
-            continue
+        for transcript_name in TRANSCRIPT_FILENAME_CANDIDATES:
+            try:
+                path = hf_hub_download(
+                    repo_id=REPO_ID,
+                    repo_type="dataset",
+                    filename=f"{root}/{transcript_name}",
+                )
+                return Path(path), root
+            except Exception:
+                continue
     raise ValueError("Required JSUT transcript file could not be located")
 
 
