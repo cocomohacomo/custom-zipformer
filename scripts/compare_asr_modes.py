@@ -46,6 +46,8 @@ def compare_reports(named_paths: list[tuple[str, Path]]) -> dict:
             "complete_omissions": sum(bool(row.get("complete_omission")) for row in rows),
             "near_complete_omissions": sum(bool(row.get("near_complete_omission")) for row in rows),
             "severe_deletions": sum(bool(row.get("severe_deletion")) for row in rows),
+            "timestamp_merge_cases": sum(row.get("overlap_merge_method") == "timestamp" for row in rows),
+            "text_fallback_cases": sum(row.get("overlap_merge_method") == "text_fallback" for row in rows),
         }
 
     baseline_cases = baseline["cases"]
