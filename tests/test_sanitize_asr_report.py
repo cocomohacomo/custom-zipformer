@@ -49,7 +49,7 @@ class SanitizeAsrReportTests(unittest.TestCase):
                 self.assertIn("public_metrics.json", workflow)
                 self.assertIn("workflow_dispatch:", workflow)
                 self.assertIn("acknowledge_license", workflow)
-                self.assertIn("default: \\"no\\"", workflow)
+                self.assertIn('default: "no"', workflow)
                 self.assertIn(f"rm -rf tests/data/{dataset}_ja/clips", workflow)
                 self.assertIn(f"rm -f tests/data/{dataset}_ja/manifest.json", workflow)
                 self.assertIn(f"transcripts*.tsv", workflow)
