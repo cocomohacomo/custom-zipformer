@@ -99,37 +99,37 @@ def merge_timestamped_chunks(
     if count == 0:
         return "", "empty"
     if not (len(chunk_start_seconds) == len(chunk_durations_seconds) == count):
-        return merge_overlapping_text([str(item.get("text", "")) for item in chunk_results]), "text_fallback"
+        return _concatenate_chunk_text([str(item.get("text", "")) for item in chunk_results]), "text_fallback"
     # Invalid timing metadata must never silently discard tokens at a seam.
     try:
         starts = [float(value) for value in chunk_start_seconds]
         durations = [float(value) for value in chunk_durations_seconds]
     except (TypeError, ValueError):
-        return merge_overlapping_text([str(item.get("text", "")) for item in chunk_results]), "text_fallback"
+        return _concatenate_chunk_text([str(item.get("text", "")) for item in chunk_results]), "text_fallback"
     if any(not math.isfinite(value) for value in starts + durations):
-        return merge_overlapping_text([str(item.get("text", "")) for item in chunk_results]), "text_fallback"
+        return _concatenate_chunk_text([str(item.get("text", "")) for item in chunk_results]), "text_fallback"
     if any(value <= 0 for value in durations):
-        return merge_overlapping_text([str(item.get("text", "")) for item in chunk_results]), "text_fallback"
+        return _concatenate_chunk_text([str(item.get("text", "")) for item in chunk_results]), "text_fallback"
     if starts[0] < 0 or any(right <= left for left, right in zip(starts, starts[1:])):
-        return merge_overlapping_text([str(item.get("text", "")) for item in chunk_results]), "text_fallback"
+        return _concatenate_chunk_text([str(item.get("text", "")) for item in chunk_results]), "text_fallback"
     normalized = []
     for index, item in enumerate(chunk_results):
         text = str(item.get("text", "")).strip()
         tokens = list(item.get("tokens") or [])
         timestamps = list(item.get("timestamps") or [])
         if not tokens or len(tokens) != len(timestamps):
-            return merge_overlapping_text([str(x.get("text", "")) for x in chunk_results]), "text_fallback"
+            return _concatenate_chunk_text([str(x.get("text", "")) for x in chunk_results]), "text_fallback"
         try:
             times = [float(value) for value in timestamps]
         except (TypeError, ValueError):
-            return merge_overlapping_text([str(x.get("text", "")) for x in chunk_results]), "text_fallback"
+            return _concatenate_chunk_text([str(x.get("text", "")) for x in chunk_results]), "text_fallback"
         if any(not math.isfinite(value) or value < 0 or value > durations[index] + 0.25 for value in times):
-            return merge_overlapping_text([str(x.get("text", "")) for x in chunk_results]), "text_fallback"
+            return _concatenate_chunk_text([str(x.get("text", "")) for x in chunk_results]), "text_fallback"
         if any(right < left for left, right in zip(times, times[1:])):
-            return merge_overlapping_text([str(x.get("text", "")) for x in chunk_results]), "text_fallback"
+            return _concatenate_chunk_text([str(x.get("text", "")) for x in chunk_results]), "text_fallback"
         rendered = "".join(str(token).replace("▁", " ") for token in tokens)
         if rendered.strip() != text:
-            return merge_overlapping_text([str(x.get("text", "")) for x in chunk_results]), "text_fallback"
+            return _concatenate_chunk_text([str(x.get("text", "")) for x in chunk_results]), "text_fallback"
         normalized.append((tokens, times))
 
     lower_bounds = [float("-inf")] * count
@@ -151,6 +151,11 @@ def merge_timestamped_chunks(
             if lower_bounds[index] <= absolute_time < upper_bounds[index]:
                 merged_tokens.append(str(token).replace("▁", " "))
     return "".join(merged_tokens).strip(), "timestamp"
+
+def _concatenate_chunk_text(texts: list[str]) -> str:
+    """Preserve all text when fallback overlap cannot be proven from timing."""
+    return "".join(str(text).strip() for text in texts if str(text).strip())
+
 
 def merge_overlapping_text(texts: list[str], min_overlap_chars: int = 4) -> str:
     """Remove only substantial exact suffix/prefix duplicates between adjacent chunks.
