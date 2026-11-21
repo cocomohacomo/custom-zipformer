@@ -13,6 +13,8 @@ class ZipformerInferenceSourceTests(unittest.TestCase):
         source = Path("scripts/run_sherpa_zipformer.py").read_text(encoding="utf-8")
         self.assertIn("split_with_overlap(", source)
         self.assertIn("chunks, overlap_starts = split_with_overlap(", source)
+        self.assertIn("merge_timestamped_chunks(", source)
+        self.assertIn("overlap_merge_method", source)
 
 
 if __name__ == "__main__":
