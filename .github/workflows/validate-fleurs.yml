@@ -97,12 +97,12 @@ jobs:
                    "transcripts_silence_aware_15s.tsv", "transcripts_overlap_2s.tsv"]
           for name in names:
               with (root / name).open(encoding="utf-8", newline="") as stream:
-                  rows = list(csv.DictReader(stream, delimiter="\\t"))
+                  rows = list(csv.DictReader(stream, delimiter="\t"))
               if [row["case_id"] for row in rows] != expected:
                   raise SystemExit(f"Case IDs/order mismatch in {name}")
               empty_hypotheses = sum(not row["hypothesis"].strip() for row in rows)
               print(f"{name}: empty hypotheses={empty_hypotheses} (counted as omissions, not treated as a tooling failure)")
-          overlap = list(csv.DictReader((root / names[-1]).open(encoding="utf-8", newline=""), delimiter="\\t"))
+          overlap = list(csv.DictReader((root / names[-1]).open(encoding="utf-8", newline=""), delimiter="\t"))
           for row in overlap:
               count = int(row["inference_chunks"])
               starts = [float(x) for x in row["chunk_start_offsets_seconds"].split(",") if x]
