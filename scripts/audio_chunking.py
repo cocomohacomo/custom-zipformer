@@ -116,7 +116,7 @@ def merge_timestamped_chunks(
             return merge_overlapping_text([str(x.get("text", "")) for x in chunk_results]), "text_fallback"
         rendered = "".join(str(token).replace("▁", " ") for token in tokens)
         if rendered.strip() != text:
-            return "".join(str(x.get("text", "")).strip() for x in chunk_results), "text_fallback"
+            return merge_overlapping_text([str(x.get("text", "")) for x in chunk_results]), "text_fallback"
         normalized.append((tokens, times))
 
     lower_bounds = [float("-inf")] * count
