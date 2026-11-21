@@ -85,43 +85,8 @@ jobs:
             --report silence_aware=tests/data/fleurs_ja/metrics_silence_aware_15s.json \
             --report overlap_2s=tests/data/fleurs_ja/metrics_overlap_2s.json \
             --output-json tests/data/fleurs_ja/mode_comparison.json
-      - name: Validate paired outputs and report omission counts
-        run: |
-          python - <<'PY'
-          import csv, json
-          from pathlib import Path
-          root = Path("tests/data/fleurs_ja")
-          manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
-          expected = [item["case_id"] for item in manifest["manifest"]]
-          names = ["transcripts.tsv", "transcripts_chunked_15s.tsv",
-                   "transcripts_silence_aware_15s.tsv", "transcripts_overlap_2s.tsv"]
-          for name in names:
-              with (root / name).open(encoding="utf-8", newline="") as stream:
-                  rows = list(csv.DictReader(stream, delimiter="\t"))
-              if [row["case_id"] for row in rows] != expected:
-                  raise SystemExit(f"Case IDs/order mismatch in {name}")
-              empty_hypotheses = sum(not row["hypothesis"].strip() for row in rows)
-              print(f"{name}: empty hypotheses={empty_hypotheses} (counted as omissions, not treated as a tooling failure)")
-          overlap = list(csv.DictReader((root / names[-1]).open(encoding="utf-8", newline=""), delimiter="\t"))
-          for row in overlap:
-              count = int(row["inference_chunks"])
-              starts = [float(x) for x in row["chunk_start_offsets_seconds"].split(",") if x]
-              if len(starts) != count or not starts or starts[0] != 0.0:
-                  raise SystemExit("Invalid overlap chunk offsets")
-              if any(b <= a for a, b in zip(starts, starts[1:])):
-                  raise SystemExit("Non-increasing overlap chunk offsets")
-              if row.get("overlap_merge_method") not in {"timestamp", "text_fallback"}:
-                  raise SystemExit("Missing overlap merge method diagnostic")
-          for name in ("metrics.json", "metrics_chunked_15s.json",
-                       "metrics_silence_aware_15s.json", "metrics_overlap_2s.json"):
-              report = json.loads((root / name).read_text(encoding="utf-8"))
-              print(f"{name}: cases={report['case_count']}, CER={report['summary']['char']['cer']:.4f}, "
-                    f"deletion_rate={report['summary']['char']['deletion_rate']:.4f}, "
-                    f"complete={report['complete_omission']['empty_hypothesis_count']}, "
-                    f"near_complete={report['near_complete_omission']['count']}, "
-                    f"severe={report['severe_deletion']['count']}")
-          print(f"Validated {len(expected)} paired FLEURS utterances across four inference modes.")
-          PY
+      - name: Validate paired inference outputs and report omissions
+        run: python scripts/validate_asr_evaluation.py --root tests/data/fleurs_ja
       - name: Sanitize output to aggregate-only metrics
         if: success()
         run: |
