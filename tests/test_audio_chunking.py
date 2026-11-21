@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 import numpy as np
 
-from scripts.audio_chunking import merge_overlapping_text, merge_timestamped_chunks, split_at_low_energy, split_with_overlap
+from scripts.audio_chunking import merge_overlapping_text, merge_timestamped_chunks, split_at_low_energy, split_fixed_chunks, split_with_overlap
 
 
 class SilenceAwareChunkingTests(unittest.TestCase):
@@ -42,6 +42,19 @@ class SilenceAwareChunkingTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             split_at_low_energy(np.zeros((100, 2)), 16000, 15)
 
+
+    def test_fixed_chunks_retain_final_partial_chunk_and_exact_sample_coverage(self):
+        for sample_count in (1, 15999, 16000, 16001, 48001):
+            x = np.arange(sample_count, dtype=np.float32)
+            chunks = split_fixed_chunks(x, 16000, 1.0)
+            self.assertTrue(chunks)
+            self.assertTrue(all(len(chunk) > 0 for chunk in chunks))
+            np.testing.assert_array_equal(np.concatenate(chunks), x)
+            self.assertEqual(len(chunks[-1]), sample_count - (len(chunks) - 1) * 16000)
+
+    def test_fixed_chunk_split_rejects_non_finite_audio(self):
+        with self.assertRaisesRegex(ValueError, "finite"):
+            split_fixed_chunks(np.array([0.0, np.nan]), 16000, 1.0)
 
 class OverlapChunkingTests(unittest.TestCase):
     def test_chunks_share_waveform_context(self):
