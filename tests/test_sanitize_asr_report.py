@@ -149,16 +149,14 @@ class SanitizeAsrReportTests(unittest.TestCase):
         for dataset in ("jsut", "fleurs"):
             with self.subTest(dataset=dataset):
                 workflow = (root / ".github" / "workflows" / f"validate-{dataset}.yml").read_text(encoding="utf-8")
-                self.assertIn("workflow_dispatch:", workflow)
-        self.assertNotIn("\n  push:\n", workflow)
-        self.assertIn("sanitize_asr_report.py", workflow)
+                self.assertIn("sanitize_asr_report.py", workflow)
                 self.assertIn("public_metrics.json", workflow)
                 self.assertIn("workflow_dispatch:", workflow)
                 self.assertIn("acknowledge_license", workflow)
                 self.assertIn('default: "no"', workflow)
                 self.assertIn(f"rm -rf tests/data/{dataset}_ja/clips", workflow)
                 self.assertIn(f"rm -f tests/data/{dataset}_ja/manifest.json", workflow)
-                self.assertIn(f"transcripts*.tsv", workflow)
+                self.assertIn("transcripts*.tsv", workflow)
                 self.assertIn("metrics*.json", workflow)
                 self.assertIn("mode_comparison.json", workflow)
                 artifact = workflow.split("uses: actions/upload-artifact@v4", 1)[1]
@@ -167,7 +165,6 @@ class SanitizeAsrReportTests(unittest.TestCase):
                 self.assertNotIn("mode_comparison.json", artifact)
                 self.assertNotIn("transcripts", artifact)
                 self.assertNotIn("manifest.json", artifact)
-
 
     def test_rms_normalized_mode_is_allowed_in_paired_comparisons(self):
         safe = sanitize_comparisons({
@@ -223,6 +220,8 @@ class SanitizeAsrReportTests(unittest.TestCase):
     def test_common_voice_workflow_uploads_only_sanitized_aggregate_report(self):
         root = Path(__file__).resolve().parents[1]
         workflow = (root / ".github" / "workflows" / "acquire-and-measure-baseline.yml").read_text(encoding="utf-8")
+        self.assertIn("workflow_dispatch:", workflow)
+        self.assertNotIn("\n  push:\n", workflow)
         self.assertIn("sanitize_asr_report.py", workflow)
         self.assertIn("--extra-report rms_normalized=normalized_metrics.json", workflow)
         self.assertIn("public_metrics.json", workflow)
