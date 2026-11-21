@@ -108,7 +108,7 @@ def validate_evaluation(root: Path) -> dict:
             for row in rows:
                 try:
                     raw_chunk_count = row["inference_chunks"]
-                    if not raw_chunk_count.isdigit():
+                    if not isinstance(raw_chunk_count, str) or not raw_chunk_count.isdigit():
                         raise ValueError("invalid chunk count")
                     chunk_count = int(raw_chunk_count)
                     starts = [float(value) for value in row["chunk_start_offsets_seconds"].split(",") if value]
