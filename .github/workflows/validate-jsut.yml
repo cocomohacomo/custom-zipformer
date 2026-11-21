@@ -146,16 +146,18 @@ jobs:
           print(f"Overlap merge methods: {methods}")
           print(f"Validated {len(expected)} paired JSUT utterances across four inference modes.")
           PY
-      - name: Upload metrics and transcripts only (not licensed audio)
+      - name: Create privacy-safe aggregate report
+        if: always()
+        run: |
+          python scripts/sanitize_asr_report.py --root tests/data/jsut_ja --comparison mode_comparison.json --output tests/data/jsut_ja/public_metrics.json
+          rm -rf tests/data/jsut_ja/clips
+          rm -f tests/data/jsut_ja/manifest.json tests/data/jsut_ja/transcripts*.tsv tests/data/jsut_ja/metrics*.stdout.json
+      - name: Upload aggregate metrics only (no audio, transcript, manifest, or per-utterance identifiers)
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: jsut-asr-validation-${{ github.run_id }}
-          path: |
-            tests/data/jsut_ja/manifest.json
-            tests/data/jsut_ja/transcripts*.tsv
-            tests/data/jsut_ja/metrics*.json
-            tests/data/jsut_ja/mode_comparison.json
+          name: jsut-asr-aggregate-${{ github.run_id }}
+          path: tests/data/jsut_ja/public_metrics.json
           if-no-files-found: warn
           retention-days: 30
   license-not-acknowledged:
