@@ -7,7 +7,7 @@ from pathlib import Path
 
 import numpy as np
 
-from scripts.run_sherpa_zipformer import prepare_inference_audio
+from scripts.run_sherpa_zipformer import prepare_inference_audio, decode_audio_chunks
 
 
 class ZipformerInferenceSourceTests(unittest.TestCase):
@@ -61,6 +61,35 @@ class ZipformerInferenceSourceTests(unittest.TestCase):
             prepare_inference_audio(np.ones(10, dtype=np.float32), 0)
         with self.assertRaisesRegex(ValueError, "at least one frame"):
             prepare_inference_audio(np.array([], dtype=np.float32), 16000)
+
+
+    def test_offline_decoder_processes_every_chunk_including_final_partial(self):
+        class FakeStream:
+            def __init__(self):
+                self.audio = None
+                self.result = None
+            def accept_waveform(self, sample_rate, audio):
+                self.audio = np.asarray(audio).copy()
+                self.sample_rate = sample_rate
+
+        class FakeRecognizer:
+            def __init__(self):
+                self.decoded = []
+            def create_stream(self):
+                return FakeStream()
+            def decode_stream(self, stream):
+                self.decoded.append((stream.sample_rate, stream.audio.copy()))
+                stream.result = types.SimpleNamespace(
+                    text=str(len(stream.audio)), tokens=[], timestamps=[]
+                )
+
+        recognizer = FakeRecognizer()
+        chunks = [np.ones(16000), np.ones(16000), np.ones(37)]
+        results, durations = decode_audio_chunks(recognizer, chunks)
+        self.assertEqual([len(audio) for _, audio in recognizer.decoded], [16000, 16000, 37])
+        self.assertEqual([rate for rate, _ in recognizer.decoded], [16000, 16000, 16000])
+        self.assertEqual([item["text"] for item in results], ["16000", "16000", "37"])
+        self.assertEqual(durations, [1.0, 1.0, 37 / 16000])
 
     def test_inference_runner_is_valid_python(self):
         source = Path("scripts/run_sherpa_zipformer.py").read_text(encoding="utf-8")
