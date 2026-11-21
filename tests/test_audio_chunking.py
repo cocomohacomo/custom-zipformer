@@ -48,6 +48,27 @@ class OverlapChunkingTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             split_with_overlap(np.zeros(10), 10, 2, 2)
 
+    def test_overlap_chunks_cover_entire_signal_without_gaps(self):
+        for sample_rate in (8000, 16000, 44100):
+            for sample_count in (1, 17, 159999, 480001):
+                x = np.arange(sample_count, dtype=np.float32)
+                chunks, later_starts = split_with_overlap(
+                    x, sample_rate, chunk_seconds=3.7, overlap_seconds=0.41
+                )
+                starts = [0, *[round(value * sample_rate) for value in later_starts]]
+                self.assertEqual(len(chunks), len(starts))
+                self.assertEqual(starts[0], 0)
+                self.assertEqual(starts[-1] + len(chunks[-1]), sample_count)
+                for index in range(1, len(chunks)):
+                    previous_end = starts[index - 1] + len(chunks[index - 1])
+                    self.assertLessEqual(starts[index], previous_end)
+                    self.assertGreater(starts[index], starts[index - 1])
+                    overlap = previous_end - starts[index]
+                    if overlap:
+                        np.testing.assert_array_equal(
+                            chunks[index - 1][-overlap:], chunks[index][:overlap]
+                        )
+
     def test_exact_text_overlap_is_removed(self):
         self.assertEqual(merge_overlapping_text(["今日はとても晴れ", "とても晴れですね"]), "今日はとても晴れですね")
 
