@@ -86,8 +86,7 @@ def main() -> int:
     ]
     args.output_tsv.parent.mkdir(parents=True, exist_ok=True)
     with args.output_tsv.open("w", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=fields, delimiter="\t", lineterminator="
-")
+        writer = csv.DictWriter(f, fieldnames=fields, delimiter="\t", lineterminator="\n")
         writer.writeheader()
         for item in entries:
             audio_path = (args.manifest.parent / item["audio"]).resolve()
@@ -125,6 +124,12 @@ def main() -> int:
                 )
             elif args.chunk_seconds is None:
                 chunks = [inference_samples]
+            elif args.chunk_overlap_seconds > 0:
+                from audio_chunking import split_with_overlap
+                chunks, boundaries = split_with_overlap(
+                    inference_samples, 16000, args.chunk_seconds,
+                    args.chunk_overlap_seconds,
+                )
             else:
                 chunk_samples = max(1, int(round(args.chunk_seconds * 16000)))
                 chunks = [inference_samples[start:start + chunk_samples]
@@ -142,10 +147,8 @@ def main() -> int:
                 hypothesis = merge_overlapping_text(chunk_texts)
             else:
                 hypothesis = "".join(chunk_texts)
-            hypothesis = hypothesis.replace("\t", " ").replace("\r", " ").replace("
-", " ").strip()
-            reference = str(item["reference"]).replace("\t", " ").replace("\r", " ").replace("
-", " ").strip()
+            hypothesis = hypothesis.replace("\t", " ").replace("\r", " ").replace("\n", " ").strip()
+            reference = str(item["reference"]).replace("\t", " ").replace("\r", " ").replace("\n", " ").strip()
             writer.writerow({
                 "case_id": str(item["case_id"]), "category": str(item.get("category", "")),
                 "reference": reference, "hypothesis": hypothesis,
