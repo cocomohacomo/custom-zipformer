@@ -17,7 +17,6 @@ COUNT_KEYS = {
 }
 RATE_KEYS = {"cer", "deletion_rate", "insertion_rate", "substitution_rate"}
 CATEGORY_METRIC_KEYS = tuple(sorted(COUNT_KEYS | RATE_KEYS))
-ALLOWED_MODES = set(METRIC_FILES) | {"rms_normalized"}
 
 METRIC_FILES = {
     "whole": "metrics.json",
@@ -25,6 +24,7 @@ METRIC_FILES = {
     "silence_aware_15s": "metrics_silence_aware_15s.json",
     "overlap_2s": "metrics_overlap_2s.json",
 }
+ALLOWED_MODES = set(METRIC_FILES) | {"rms_normalized"}
 
 
 def _number(value: object, *, integer: bool = False, nonnegative: bool = False):
