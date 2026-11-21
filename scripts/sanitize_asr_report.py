@@ -8,6 +8,13 @@ import argparse
 import json
 from pathlib import Path
 
+CATEGORY_NAMES = {"short", "medium", "long", "uncategorized"}
+CATEGORY_METRIC_KEYS = (
+    "case_count", "substitutions", "deletions", "insertions",
+    "reference_units", "hypothesis_units", "cer", "deletion_rate",
+    "insertion_rate", "substitution_rate",
+)
+
 METRIC_FILES = {
     "whole": "metrics.json",
     "fixed_15s": "metrics_chunked_15s.json",
@@ -17,6 +24,12 @@ METRIC_FILES = {
 
 def sanitize_metrics(report: dict) -> dict:
     summary = report.get("summary", {}).get("char", {})
+    raw_categories = report.get("category_summary", {})
+    categories = {
+        name: {key: raw_categories[name].get(key) for key in CATEGORY_METRIC_KEYS}
+        for name in sorted(CATEGORY_NAMES.intersection(raw_categories))
+        if isinstance(raw_categories.get(name), dict)
+    }
     return {
         "case_count": report.get("case_count"),
         "character_error_rate": summary.get("cer"),
@@ -29,7 +42,7 @@ def sanitize_metrics(report: dict) -> dict:
         "complete_omission_count": report.get("complete_omission", {}).get("empty_hypothesis_count"),
         "near_complete_omission_count": report.get("near_complete_omission", {}).get("count"),
         "severe_deletion_count": report.get("severe_deletion", {}).get("count"),
-        "category_summary": report.get("category_summary", {}),
+        "category_summary": categories,
     }
 
 def main() -> int:
