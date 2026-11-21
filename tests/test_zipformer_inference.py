@@ -91,6 +91,35 @@ class ZipformerInferenceSourceTests(unittest.TestCase):
         self.assertEqual([item["text"] for item in results], ["16000", "16000", "37"])
         self.assertEqual(durations, [1.0, 1.0, 37 / 16000])
 
+
+    def test_offline_decoder_keeps_sub_frame_and_silent_chunks(self):
+        class FakeStream:
+            def accept_waveform(self, sample_rate, audio):
+                self.audio = np.asarray(audio).copy()
+                self.sample_rate = sample_rate
+                self.result = None
+
+        class FakeRecognizer:
+            def __init__(self):
+                self.received = []
+            def create_stream(self):
+                return FakeStream()
+            def decode_stream(self, stream):
+                self.received.append((stream.sample_rate, stream.audio.copy()))
+                stream.result = types.SimpleNamespace(text="", tokens=[], timestamps=[])
+
+        recognizer = FakeRecognizer()
+        tiny = np.array([0.0], dtype=np.float32)
+        silent = np.zeros(400, dtype=np.float32)
+        results, durations = decode_audio_chunks(recognizer, [tiny, silent])
+        self.assertEqual([len(audio) for _, audio in recognizer.received], [1, 400])
+        self.assertTrue(all(rate == 16000 for rate, _ in recognizer.received))
+        self.assertEqual(results, [
+            {"text": "", "tokens": [], "timestamps": []},
+            {"text": "", "tokens": [], "timestamps": []},
+        ])
+        self.assertEqual(durations, [1 / 16000, 0.025])
+
     def test_inference_runner_is_valid_python(self):
         source = Path("scripts/run_sherpa_zipformer.py").read_text(encoding="utf-8")
         compile(source, "scripts/run_sherpa_zipformer.py", "exec")
