@@ -25,6 +25,7 @@ METRIC_FILES = {
     "overlap_2s": "metrics_overlap_2s.json",
 }
 ALLOWED_MODES = set(METRIC_FILES) | {"rms_normalized"}
+COMPARISON_MODE_ALIASES = {"silence_aware": "silence_aware_15s"}
 
 
 def _number(value: object, *, integer: bool = False, nonnegative: bool = False):
@@ -107,9 +108,9 @@ def sanitize_comparisons(comparison: dict) -> dict:
         return {}
     paired = {}
     allowed_modes = ALLOWED_MODES - {"whole"}
-    for mode in sorted(allowed_modes.intersection(raw)):
-        item = raw.get(mode)
-        if not isinstance(item, dict):
+    for source_mode, item in sorted(raw.items()):
+        mode = COMPARISON_MODE_ALIASES.get(source_mode, source_mode)
+        if mode not in allowed_modes or not isinstance(item, dict) or mode in paired:
             continue
         baseline = item.get("baseline")
         paired[mode] = {
