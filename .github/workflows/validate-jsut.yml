@@ -147,9 +147,14 @@ jobs:
           print(f"Validated {len(expected)} paired JSUT utterances across four inference modes.")
           PY
       - name: Sanitize output to aggregate-only metrics
-        if: always()
+        if: success()
         run: |
-          python scripts/sanitize_asr_report.py --root tests/data/jsut_ja --comparison mode_comparison.json --output tests/data/jsut_ja/public_metrics.json
+          python scripts/sanitize_asr_report.py --root tests/data/jsut_ja --comparison mode_comparison.json \
+            --report whole=metrics.json \
+            --report fixed_15s=metrics_chunked_15s.json \
+            --report silence_aware_15s=metrics_silence_aware_15s.json \
+            --report overlap_2s=metrics_overlap_2s.json \
+            --output tests/data/jsut_ja/public_metrics.json
       - name: Remove local licensed audio and raw reports
         if: always()
         run: |
@@ -159,7 +164,7 @@ jobs:
           rm -f tests/data/jsut_ja/metrics*.stdout.json tests/data/jsut_ja/metrics*.json
           rm -f tests/data/jsut_ja/mode_comparison.json
       - name: Upload sanitized aggregate metrics only
-        if: always()
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: jsut-asr-aggregate-${{ github.run_id }}
