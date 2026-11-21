@@ -14,11 +14,11 @@ class JsutDatasetPreparationTests(unittest.TestCase):
     def test_huggingface_mirror_root_matches_repository_tree(self):
         self.assertEqual(SUBSET_ROOT, "basic5000")
 
-    def test_resolves_flat_huggingface_mirror_layout_after_nested_path_404(self):
+    def test_resolves_alternate_jsut_mirror_layout_and_transcript_name(self):
         requested = []
         def fake_download(*, repo_id, repo_type, filename):
             requested.append(filename)
-            if filename.startswith("basic5000/"):
+            if filename != "jsut_ver1.1/basic5000/transcripts_utf8.txt":
                 raise FileNotFoundError("not present in this layout")
             return "/tmp/jsut-transcript.txt"
         path, root = locate_jsut_transcripts(fake_download)
@@ -26,7 +26,9 @@ class JsutDatasetPreparationTests(unittest.TestCase):
         self.assertEqual(root, "jsut_ver1.1/basic5000")
         self.assertEqual(requested, [
             "basic5000/transcript_utf8.txt",
+            "basic5000/transcripts_utf8.txt",
             "jsut_ver1.1/basic5000/transcript_utf8.txt",
+            "jsut_ver1.1/basic5000/transcripts_utf8.txt",
         ])
 
     def test_parses_colon_inside_transcript(self):
