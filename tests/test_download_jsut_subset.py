@@ -38,8 +38,12 @@ class JsutDatasetPreparationTests(unittest.TestCase):
 
     def test_main_suppresses_downloader_exception_details(self):
         output = io.StringIO()
+        def noisy_failure(*args, **kwargs):
+            print("PRIVATE_JSUT_ID transcript.wav")
+            print("PRIVATE_JSUT_ID transcript.wav", file=sys.stderr)
+            raise RuntimeError("PRIVATE_JSUT_ID transcript.wav")
         with patch.object(sys, "argv", ["download_jsut_subset.py", "--limit", "1"]), \
-             patch.object(jsut, "prepare_dataset", side_effect=RuntimeError("PRIVATE_JSUT_ID transcript.wav")), \
+             patch.object(jsut, "prepare_dataset", side_effect=noisy_failure), \
              contextlib.redirect_stdout(output):
             result = jsut.main()
         self.assertEqual(result, 1)
