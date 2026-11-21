@@ -38,7 +38,7 @@ def _number(value: object, *, integer: bool = False, nonnegative: bool = False):
         if not isinstance(value, (int, float)):
             return None
         result = value
-    if not math.isfinite(result) or (nonnegative and result < 0):
+    if (isinstance(result, float) and not math.isfinite(result)) or (nonnegative and result < 0):
         return None
     return result
 
@@ -47,7 +47,12 @@ def _metric_value(key: str, value: object):
     if key in COUNT_KEYS:
         return _number(value, integer=True, nonnegative=True)
     if key in RATE_KEYS:
-        return _number(value)
+        result = _number(value)
+        if result is None or result < 0:
+            return None
+        if key != "cer" and result > 1:
+            return None
+        return result
     return None
 
 
@@ -105,7 +110,7 @@ def sanitize_comparisons(comparison: dict) -> dict:
             continue
         baseline = item.get("baseline")
         paired[mode] = {
-            "baseline": baseline if baseline in METRIC_FILES else None,
+            "baseline": baseline if isinstance(baseline, str) and baseline in METRIC_FILES else None,
             "deletion_delta": _number(item.get("deletion_delta"), integer=True),
             "cer_delta": _number(item.get("cer_delta")),
             "cases_with_fewer_deletions": _number(item.get("cases_with_fewer_deletions"), integer=True, nonnegative=True),
