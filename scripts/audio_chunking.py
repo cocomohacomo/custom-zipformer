@@ -70,9 +70,15 @@ def split_with_overlap(samples: np.ndarray, sample_rate: int, chunk_seconds: flo
         return [], []
     size = max(1, int(round(chunk_seconds * sample_rate)))
     stride = size - int(round(overlap_seconds * sample_rate))
-    starts = list(range(0, len(x), stride))
+    starts = []
+    start = 0
+    while start < len(x):
+        starts.append(start)
+        if start + size >= len(x):
+            break
+        start += stride
     chunks = [x[start:min(start + size, len(x))] for start in starts]
-    return chunks, [start / sample_rate for start in starts]
+    return chunks, [start / sample_rate for start in starts[1:]]
 
 
 def merge_overlapping_text(texts: list[str], min_overlap_chars: int = 2) -> str:
