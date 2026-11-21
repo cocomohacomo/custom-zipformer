@@ -51,14 +51,7 @@ jobs:
       - name: Download Common Voice Japanese through MDC API
         run: |
           mkdir -p "$MDC_DOWNLOAD_PATH" corpus
-          python - <<'PY'
-          import os
-          from datacollective import download_dataset
-          dataset_id = os.environ["COMMON_VOICE_JA_DATASET_ID"]
-          print(f"Requesting authorized Common Voice dataset: {dataset_id}")
-          path = download_dataset(dataset_id, download_directory=os.environ["MDC_DOWNLOAD_PATH"], extract=True, show_progress=False, enable_logging=False)
-          print(f"Dataset downloaded and extracted to: {path}")
-          PY
+          python scripts/download_mdc_dataset.py
       - name: Locate extracted dataset
         run: |
           python - <<'PY'
