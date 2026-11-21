@@ -23,7 +23,7 @@ def main() -> int:
                    help="Decode each audio independently in fixed-size chunks; omit for whole-utterance decoding")
     p.add_argument("--silence-aware-chunk-seconds", type=float, default=None,
                    help="Split near low-energy frames around this target duration (mutually exclusive with --chunk-seconds)")
-    p.add_argument("--chunk-search-window-seconds", type=float, default=2.0,
+    p.add_argument("--chunk-overlap-seconds", type=float, default=0.0, help="Shared context for fixed chunks; requires --chunk-seconds")\n    p.add_argument("--chunk-search-window-seconds", type=float, default=2.0,
                    help="Search +/- this many seconds for a quiet chunk boundary (default: 2)")
     args = p.parse_args()
     if args.threads < 1:
@@ -36,7 +36,7 @@ def main() -> int:
         p.error("--silence-aware-chunk-seconds must be > 0")
     if args.chunk_seconds is not None and args.silence_aware_chunk_seconds is not None:
         p.error("--chunk-seconds and --silence-aware-chunk-seconds are mutually exclusive")
-    if args.chunk_search_window_seconds < 0:
+    if args.chunk_overlap_seconds < 0 or (args.chunk_overlap_seconds and args.chunk_seconds is None):\n        p.error("--chunk-overlap-seconds requires --chunk-seconds and must be >= 0")\n    if args.chunk_seconds is not None and args.chunk_overlap_seconds >= args.chunk_seconds:\n        p.error("--chunk-overlap-seconds must be smaller than --chunk-seconds")\n    if args.chunk_search_window_seconds < 0:
         p.error("--chunk-search-window-seconds must be >= 0")
     if args.normalize_rms_dbfs is not None and not -90 <= args.normalize_rms_dbfs <= 0:
         p.error("--normalize-rms-dbfs must be between -90 and 0 dBFS")
@@ -131,7 +131,7 @@ def main() -> int:
                 stream.accept_waveform(16000, chunk)
                 recognizer.decode_stream(stream)
                 chunk_texts.append(stream.result.text.strip())
-            hypothesis = "".join(chunk_texts).replace("\t", " ").replace("\r", " ").replace("\n", " ").strip()
+            if args.chunk_overlap_seconds > 0:\n                from audio_chunking import merge_overlapping_text\n                hypothesis = merge_overlapping_text(chunk_texts)\n            else:\n                hypothesis = "".join(chunk_texts)\n            hypothesis = hypothesis.replace("\t", " ").replace("\r", " ").replace("\n", " ").strip()
             reference = str(item["reference"]).replace("\t", " ").replace("\r", " ").replace("\n", " ").strip()
             writer.writerow({
                 "case_id": str(item["case_id"]), "category": str(item.get("category", "")),
