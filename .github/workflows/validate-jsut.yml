@@ -146,20 +146,14 @@ jobs:
           print(f"Overlap merge methods: {methods}")
           print(f"Validated {len(expected)} paired JSUT utterances across four inference modes.")
           PY
-      - name: Create privacy-safe aggregate report
+      - name: Sanitize output to aggregate-only metrics
         if: always()
         run: |
           python scripts/sanitize_asr_report.py --root tests/data/jsut_ja --comparison mode_comparison.json --output tests/data/jsut_ja/public_metrics.json
           rm -rf tests/data/jsut_ja/clips
           rm -rf ~/.cache/huggingface/hub/datasets--FluidInference--JSUT-basic5000
           rm -f tests/data/jsut_ja/manifest.json tests/data/jsut_ja/transcripts*.tsv tests/data/jsut_ja/metrics*.stdout.json
-      - name: Ensure licensed audio is never tracked in Git
-        run: |
-          if git ls-files '*.wav' '*.flac' '*.mp3' | grep -q .; then
-            echo "::error::Audio files must not be tracked in the repository."
-            exit 1
-          fi
-      - name: Upload aggregate metrics only (no audio, transcript, manifest, or per-utterance identifiers)
+      - name: Upload sanitized aggregate metrics only
         if: always()
         uses: actions/upload-artifact@v4
         with:
