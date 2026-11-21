@@ -81,6 +81,64 @@ def split_with_overlap(samples: np.ndarray, sample_rate: int, chunk_seconds: flo
     return chunks, [start / sample_rate for start in starts[1:]]
 
 
+
+def merge_timestamped_chunks(
+    chunk_results: list[dict],
+    chunk_start_seconds: list[float],
+    chunk_durations_seconds: list[float],
+) -> tuple[str, str]:
+    """Merge overlap chunks by token start times, falling back when alignment is unusable.
+
+    Sherpa token timestamps are chunk-local. Shared audio is divided at the
+    midpoint of each overlap so only one chunk owns each side of the seam.
+    Token text must reconstruct each recognizer text exactly; otherwise the
+    timestamp path is rejected rather than risking silent token loss.
+    """
+    count = len(chunk_results)
+    if count == 0:
+        return "", "empty"
+    if not (len(chunk_start_seconds) == len(chunk_durations_seconds) == count):
+        return "".join(str(item.get("text", "")).strip() for item in chunk_results), "text_fallback"
+    normalized = []
+    for index, item in enumerate(chunk_results):
+        text = str(item.get("text", "")).strip()
+        tokens = list(item.get("tokens") or [])
+        timestamps = list(item.get("timestamps") or [])
+        if not tokens or len(tokens) != len(timestamps):
+            return "".join(str(x.get("text", "")).strip() for x in chunk_results), "text_fallback"
+        try:
+            times = [float(value) for value in timestamps]
+        except (TypeError, ValueError):
+            return "".join(str(x.get("text", "")).strip() for x in chunk_results), "text_fallback"
+        if any(value < 0 or value > chunk_durations_seconds[index] + 0.25 for value in times):
+            return "".join(str(x.get("text", "")).strip() for x in chunk_results), "text_fallback"
+        if any(right < left for left, right in zip(times, times[1:])):
+            return "".join(str(x.get("text", "")).strip() for x in chunk_results), "text_fallback"
+        rendered = "".join(str(token).replace("▁", " ") for token in tokens)
+        if rendered.strip() != text:
+            return "".join(str(x.get("text", "")).strip() for x in chunk_results), "text_fallback"
+        normalized.append((tokens, times))
+
+    lower_bounds = [float("-inf")] * count
+    upper_bounds = [float("inf")] * count
+    for index in range(count - 1):
+        previous_end = chunk_start_seconds[index] + chunk_durations_seconds[index]
+        next_start = chunk_start_seconds[index + 1]
+        if next_start >= previous_end:
+            continue
+        seam = (next_start + previous_end) / 2.0
+        upper_bounds[index] = seam
+        lower_bounds[index + 1] = seam
+
+    merged_tokens = []
+    for index, (tokens, times) in enumerate(normalized):
+        start = chunk_start_seconds[index]
+        for token, timestamp in zip(tokens, times):
+            absolute_time = start + timestamp
+            if lower_bounds[index] <= absolute_time < upper_bounds[index]:
+                merged_tokens.append(str(token).replace("▁", " "))
+    return "".join(merged_tokens).strip(), "timestamp"
+
 def merge_overlapping_text(texts: list[str], min_overlap_chars: int = 4) -> str:
     """Remove only substantial exact suffix/prefix duplicates between adjacent chunks.
 
