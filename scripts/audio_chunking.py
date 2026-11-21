@@ -183,3 +183,18 @@ def merge_overlapping_text(texts: list[str], min_overlap_chars: int = 4) -> str:
                 break
         merged += part[overlap:]
     return merged
+
+
+def split_fixed_chunks(samples: np.ndarray, sample_rate: int, chunk_seconds: float):
+    """Split mono audio into contiguous chunks, retaining the final partial chunk."""
+    x = np.asarray(samples)
+    if x.ndim != 1:
+        raise ValueError("samples must be mono (1-D)")
+    if np.issubdtype(x.dtype, np.inexact) and not np.isfinite(x).all():
+        raise ValueError("samples must contain only finite values")
+    if sample_rate <= 0 or chunk_seconds <= 0:
+        raise ValueError("sample_rate and chunk_seconds must be positive")
+    if not x.size:
+        return []
+    size = max(1, int(round(chunk_seconds * sample_rate)))
+    return [x[start:min(start + size, len(x))] for start in range(0, len(x), size)]
