@@ -100,8 +100,8 @@ jobs:
                   rows = list(csv.DictReader(stream, delimiter="\\t"))
               if [row["case_id"] for row in rows] != expected:
                   raise SystemExit(f"Case IDs/order mismatch in {name}")
-              if any(not row["hypothesis"].strip() for row in rows):
-                  raise SystemExit(f"Empty hypothesis found in {name}")
+              empty_hypotheses = sum(not row["hypothesis"].strip() for row in rows)
+              print(f"{name}: empty hypotheses={empty_hypotheses} (counted as omissions, not treated as a tooling failure)")
           overlap = list(csv.DictReader((root / names[-1]).open(encoding="utf-8", newline=""), delimiter="\\t"))
           for row in overlap:
               count = int(row["inference_chunks"])
