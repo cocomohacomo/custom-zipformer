@@ -13,6 +13,7 @@ on:
       - ".github/workflows/acquire-and-measure-baseline.yml"
       - "scripts/run_sherpa_zipformer.py"
       - "scripts/audio_chunking.py"
+      - "scripts/download_mdc_dataset.py"
       - "scripts/prepare_common_voice_baseline.py"
       - "scripts/deletion_metrics.py"
 
@@ -188,7 +189,16 @@ jobs:
               raise SystemExit("Raw and silence-aware inference case order differs.")
           if not silence_rows or "chunk_boundaries_seconds" not in silence_rows[0]:
               raise SystemExit("Silence-aware boundary diagnostics are missing.")
-          print(f"Validated raw, normalized, fixed-chunk, and silence-aware metrics for {report['case_count']} clips.")
+          overlap = json.loads((root / "overlap_2s_metrics.json").read_text(encoding="utf-8"))
+          with (root / "transcripts_overlap_2s.tsv").open(encoding="utf-8", newline="") as f:
+              overlap_rows = list(csv.DictReader(f, delimiter="\\t"))
+          if overlap.get("case_count") != len(manifest["manifest"]) or len(overlap_rows) != len(manifest["manifest"]):
+              raise SystemExit("Overlap inference does not contain exactly one result per input clip.")
+          if [r["case_id"] for r in overlap_rows] != [r["case_id"] for r in raw_rows]:
+              raise SystemExit("Raw and overlap inference case order differs.")
+          if not overlap_rows or "inference_chunks" not in overlap_rows[0]:
+              raise SystemExit("Overlap chunk-count diagnostics are missing.")
+          print(f"Validated raw, normalized, fixed-chunk, silence-aware, and overlap metrics for {report['case_count']} clips.")
           PY
       - name: Save baseline artifacts
         if: always()
