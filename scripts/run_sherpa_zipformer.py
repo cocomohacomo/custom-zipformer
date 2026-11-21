@@ -82,7 +82,7 @@ def main() -> int:
         "case_id", "category", "reference", "hypothesis",
         "audio_duration_seconds", "audio_rms", "audio_peak",
         "near_silence_fraction", "clipping_fraction",
-        "source_sample_rate", "source_channels", "applied_gain_db", "inference_audio_rms", "inference_chunks", "chunk_boundaries_seconds", "chunk_start_offsets_seconds",
+        "source_sample_rate", "source_channels", "applied_gain_db", "inference_audio_rms", "inference_chunks", "chunk_boundaries_seconds", "chunk_start_offsets_seconds", "overlap_merge_method",
     ]
     args.output_tsv.parent.mkdir(parents=True, exist_ok=True)
     with args.output_tsv.open("w", encoding="utf-8", newline="") as f:
@@ -137,16 +137,29 @@ def main() -> int:
                 chunks = [inference_samples[start:start + chunk_samples]
                           for start in range(0, len(inference_samples), chunk_samples)]
             chunk_texts = []
+            chunk_results = []
+            chunk_durations = []
             for chunk in chunks:
                 if chunk.size == 0:
                     continue
                 stream = recognizer.create_stream()
                 stream.accept_waveform(16000, chunk)
                 recognizer.decode_stream(stream)
-                chunk_texts.append(stream.result.text.strip())
+                result = stream.result
+                text = result.text.strip()
+                chunk_texts.append(text)
+                chunk_results.append({
+                    "text": text,
+                    "tokens": list(getattr(result, "tokens", []) or []),
+                    "timestamps": list(getattr(result, "timestamps", []) or []),
+                })
+                chunk_durations.append(float(len(chunk) / 16000))
+            overlap_merge_method = "not_applicable"
             if args.chunk_overlap_seconds > 0:
-                from audio_chunking import merge_overlapping_text
-                hypothesis = merge_overlapping_text(chunk_texts)
+                from audio_chunking import merge_timestamped_chunks
+                hypothesis, overlap_merge_method = merge_timestamped_chunks(
+                    chunk_results, chunk_start_offsets, chunk_durations
+                )
             else:
                 hypothesis = "".join(chunk_texts)
             hypothesis = hypothesis.replace("\t", " ").replace("\r", " ").replace("\n", " ").strip()
@@ -164,6 +177,7 @@ def main() -> int:
                 "inference_chunks": len(chunks),
                 "chunk_boundaries_seconds": ",".join(f"{v:.3f}" for v in boundaries),
                 "chunk_start_offsets_seconds": ",".join(f"{v:.3f}" for v in chunk_start_offsets),
+                "overlap_merge_method": overlap_merge_method,
             })
     print(json.dumps({"decoded": len(entries), "output_tsv": str(args.output_tsv),
                       "normalization": {"target_rms_dbfs": args.normalize_rms_dbfs,
