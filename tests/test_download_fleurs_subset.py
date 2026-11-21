@@ -31,6 +31,20 @@ class FleursSubsetTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "Duplicate"):
                 fleurs.read_rows(path)
 
+    def test_duplicate_filename_error_does_not_echo_source_filename(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "dev.tsv"
+            path.write_text(
+                "id\\tfile_name\\ttranscription\\n"
+                "1\\tPRIVATE_FLEURS_FILE.wav\\tこんにちは\\n"
+                "2\\tPRIVATE_FLEURS_FILE.wav\\tこんばんは\\n",
+                encoding="utf-8",
+            )
+            with self.assertRaises(ValueError) as caught:
+                fleurs.read_rows(path)
+            self.assertNotIn("PRIVATE_FLEURS_FILE.wav", str(caught.exception))
+
+
     def test_prepare_dataset_extracts_only_selected_audio(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
