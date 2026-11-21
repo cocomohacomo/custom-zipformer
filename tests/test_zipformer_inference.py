@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.util
 import unittest
 from pathlib import Path
 
@@ -22,6 +23,7 @@ class ZipformerInferenceSourceTests(unittest.TestCase):
         prepared = prepare_inference_audio(np.column_stack((left, right)), 16000)
         np.testing.assert_allclose(prepared, 0.3, atol=1e-6)
 
+    @unittest.skipUnless(importlib.util.find_spec("scipy"), "scipy is an inference dependency")
     def test_resampling_produces_expected_frame_count(self):
         source = np.sin(np.linspace(0, 10 * np.pi, 4410, dtype=np.float32))
         prepared = prepare_inference_audio(source, 44100, 16000)
