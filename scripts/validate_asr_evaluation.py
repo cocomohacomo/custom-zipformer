@@ -30,7 +30,7 @@ def _read_json(path: Path) -> dict:
 def _read_tsv(path: Path) -> list[dict[str, str]]:
     try:
         with path.open(encoding="utf-8", newline="") as stream:
-            rows = list(csv.DictReader(stream, delimiter="\\t"))
+            rows = list(csv.DictReader(stream, delimiter=chr(9)))
     except OSError as exc:
         raise ValueError("Required inference output is missing") from exc
     if not rows or not {"case_id", "hypothesis"}.issubset(rows[0]):
