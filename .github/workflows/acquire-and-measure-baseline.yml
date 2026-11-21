@@ -139,12 +139,12 @@ jobs:
       - name: Run silence-aware chunked inference comparison
         run: |
           python scripts/run_sherpa_zipformer.py tests/data/common_voice_ja/manifest.json --model-dir models/zipformer-ja --threads 2 --silence-aware-chunk-seconds 15 --chunk-search-window-seconds 2 --output-tsv tests/data/common_voice_ja/transcripts_silence_aware_15s.tsv
-      - name: Calculate deletion-focused metrics
+      - name: Run 15-second chunks with 2-second overlap\n        run: |\n          python scripts/run_sherpa_zipformer.py tests/data/common_voice_ja/manifest.json --model-dir models/zipformer-ja --threads 2 --chunk-seconds 15 --chunk-overlap-seconds 2 --output-tsv tests/data/common_voice_ja/transcripts_overlap_2s.tsv\n      - name: Calculate deletion-focused metrics
         run: |
           python scripts/deletion_metrics.py tests/data/common_voice_ja/transcripts.tsv --output-json tests/data/common_voice_ja/baseline_metrics.json > tests/data/common_voice_ja/metrics.stdout.json
           python scripts/deletion_metrics.py tests/data/common_voice_ja/transcripts_rms_normalized.tsv --output-json tests/data/common_voice_ja/normalized_metrics.json > tests/data/common_voice_ja/normalized_metrics.stdout.json
           python scripts/deletion_metrics.py tests/data/common_voice_ja/transcripts_chunked_15s.tsv --output-json tests/data/common_voice_ja/chunked_15s_metrics.json > tests/data/common_voice_ja/chunked_15s_metrics.stdout.json
-          python scripts/deletion_metrics.py tests/data/common_voice_ja/transcripts_silence_aware_15s.tsv --output-json tests/data/common_voice_ja/silence_aware_15s_metrics.json > tests/data/common_voice_ja/silence_aware_15s_metrics.stdout.json
+          python scripts/deletion_metrics.py tests/data/common_voice_ja/transcripts_silence_aware_15s.tsv --output-json tests/data/common_voice_ja/silence_aware_15s_metrics.json > tests/data/common_voice_ja/silence_aware_15s_metrics.stdout.json\n          python scripts/deletion_metrics.py tests/data/common_voice_ja/transcripts_overlap_2s.tsv --output-json tests/data/common_voice_ja/overlap_2s_metrics.json > tests/data/common_voice_ja/overlap_2s_metrics.stdout.json
       - name: Validate metrics report
         run: |
           python - <<'PY'
@@ -211,6 +211,6 @@ jobs:
             tests/data/common_voice_ja/chunked_15s_metrics.stdout.json
             tests/data/common_voice_ja/transcripts_silence_aware_15s.tsv
             tests/data/common_voice_ja/silence_aware_15s_metrics.json
-            tests/data/common_voice_ja/silence_aware_15s_metrics.stdout.json
+            tests/data/common_voice_ja/silence_aware_15s_metrics.stdout.json\n            tests/data/common_voice_ja/transcripts_overlap_2s.tsv\n            tests/data/common_voice_ja/overlap_2s_metrics.json\n            tests/data/common_voice_ja/overlap_2s_metrics.stdout.json
           if-no-files-found: warn
           retention-days: 30
