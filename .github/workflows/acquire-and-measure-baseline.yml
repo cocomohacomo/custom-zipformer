@@ -16,6 +16,7 @@ on:
       - "scripts/download_mdc_dataset.py"
       - "scripts/prepare_common_voice_baseline.py"
       - "scripts/deletion_metrics.py"
+      - "scripts/compare_asr_modes.py"
 
 permissions:
   contents: read
@@ -143,6 +144,15 @@ jobs:
           python scripts/deletion_metrics.py tests/data/common_voice_ja/transcripts_chunked_15s.tsv --output-json tests/data/common_voice_ja/chunked_15s_metrics.json > tests/data/common_voice_ja/chunked_15s_metrics.stdout.json
           python scripts/deletion_metrics.py tests/data/common_voice_ja/transcripts_silence_aware_15s.tsv --output-json tests/data/common_voice_ja/silence_aware_15s_metrics.json > tests/data/common_voice_ja/silence_aware_15s_metrics.stdout.json
           python scripts/deletion_metrics.py tests/data/common_voice_ja/transcripts_overlap_2s.tsv --output-json tests/data/common_voice_ja/overlap_2s_metrics.json > tests/data/common_voice_ja/overlap_2s_metrics.stdout.json
+      - name: Compare paired inference modes
+        run: |
+          python scripts/compare_asr_modes.py \
+            --report whole=tests/data/common_voice_ja/baseline_metrics.json \
+            --report rms_normalized=tests/data/common_voice_ja/normalized_metrics.json \
+            --report fixed_15s=tests/data/common_voice_ja/chunked_15s_metrics.json \
+            --report silence_aware=tests/data/common_voice_ja/silence_aware_15s_metrics.json \
+            --report overlap_2s=tests/data/common_voice_ja/overlap_2s_metrics.json \
+            --output-json tests/data/common_voice_ja/mode_comparison.json
       - name: Validate metrics report
         run: |
           python - <<'PY'
@@ -229,5 +239,6 @@ jobs:
             tests/data/common_voice_ja/transcripts_overlap_2s.tsv
             tests/data/common_voice_ja/overlap_2s_metrics.json
             tests/data/common_voice_ja/overlap_2s_metrics.stdout.json
+            tests/data/common_voice_ja/mode_comparison.json
           if-no-files-found: warn
           retention-days: 30
