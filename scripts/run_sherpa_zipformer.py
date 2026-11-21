@@ -149,7 +149,7 @@ def main() -> int:
         "case_id", "category", "reference", "hypothesis",
         "audio_duration_seconds", "audio_rms", "audio_peak",
         "near_silence_fraction", "clipping_fraction",
-        "source_sample_rate", "source_channels", "applied_gain_db", "inference_audio_rms", "inference_chunks", "inference_short_chunks_lt_25ms", "inference_silent_chunks", "chunk_boundaries_seconds", "chunk_start_offsets_seconds", "overlap_merge_method",
+        "source_sample_rate", "source_channels", "applied_gain_db", "inference_audio_rms", "inference_chunks", "inference_empty_chunks", "inference_short_chunks_lt_25ms", "inference_silent_chunks", "chunk_boundaries_seconds", "chunk_start_offsets_seconds", "overlap_merge_method",
     ]
     args.output_tsv.parent.mkdir(parents=True, exist_ok=True)
     with args.output_tsv.open("w", encoding="utf-8", newline="") as f:
@@ -222,6 +222,7 @@ def main() -> int:
                 "applied_gain_db": f"{20.0 * np.log10(gain):.4f}",
                 "inference_audio_rms": f"{inference_rms:.8f}",
                 "inference_chunks": len(chunk_durations),
+                "inference_empty_chunks": sum(not value for value in chunk_texts),
                 "inference_short_chunks_lt_25ms": sum(1 for value in chunk_durations if value < 0.025),
                 "inference_silent_chunks": sum(
                     1 for chunk in chunks if chunk.size and float(np.max(np.abs(chunk))) < 1e-8
