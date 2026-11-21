@@ -167,5 +167,76 @@ class SanitizeAsrReportTests(unittest.TestCase):
                 self.assertNotIn("manifest.json", artifact)
 
 
+    def test_rms_normalized_mode_is_allowed_in_paired_comparisons(self):
+        safe = sanitize_comparisons({
+            "paired_comparisons": {
+                "rms_normalized": {
+                    "baseline": "whole", "deletion_delta": -2, "cer_delta": 0.01,
+                    "cases_with_fewer_deletions": 3, "cases_with_more_deletions": 1,
+                    "cases_unchanged": 6,
+                }
+            }
+        })
+        self.assertEqual(safe["rms_normalized"]["baseline"], "whole")
+        self.assertEqual(safe["rms_normalized"]["deletion_delta"], -2)
+
+    def test_cli_sanitizes_optional_rms_normalized_report(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            report = {
+                "case_count": 2,
+                "summary": {"char": {"cer": 0.2, "deletion_rate": 0.1}},
+                "complete_omission": {"empty_hypothesis_count": 0},
+                "near_complete_omission": {"count": 1},
+                "severe_deletion": {"count": 0},
+                "cases": [{"case_id": "PRIVATE_ID", "reference": "private transcript"}],
+            }
+            names = ("metrics.json", "metrics_chunked_15s.json",
+                     "metrics_silence_aware_15s.json", "metrics_overlap_2s.json",
+                     "normalized_metrics.json")
+            for name in names:
+                (root / name).write_text(json.dumps(report), encoding="utf-8")
+            (root / "mode_comparison.json").write_text(json.dumps({
+                "paired_comparisons": {
+                    "rms_normalized": {"baseline": "whole", "deletion_delta": -2}
+                }
+            }), encoding="utf-8")
+            output = root / "public_metrics.json"
+            argv = [
+                "sanitize_asr_report.py", "--root", str(root),
+                "--comparison", "mode_comparison.json",
+                "--extra-report", "rms_normalized=normalized_metrics.json",
+                "--output", str(output),
+            ]
+            stdout = io.StringIO()
+            with patch.object(sys, "argv", argv), contextlib.redirect_stdout(stdout):
+                self.assertEqual(main(), 0)
+            rendered = output.read_text(encoding="utf-8")
+            safe = json.loads(rendered)
+            self.assertIn("rms_normalized", safe["modes"])
+            self.assertEqual(safe["paired_comparisons"]["rms_normalized"]["deletion_delta"], -2)
+            self.assertNotIn("PRIVATE_ID", rendered)
+            self.assertNotIn("private transcript", rendered)
+
+    def test_common_voice_workflow_uploads_only_sanitized_aggregate_report(self):
+        root = Path(__file__).resolve().parents[1]
+        workflow = (root / ".github" / "workflows" / "acquire-and-measure-baseline.yml").read_text(encoding="utf-8")
+        self.assertIn("sanitize_asr_report.py", workflow)
+        self.assertIn("--extra-report rms_normalized=normalized_metrics.json", workflow)
+        self.assertIn("public_metrics.json", workflow)
+        self.assertIn("rm -rf tests/data/common_voice_ja/clips", workflow)
+        self.assertIn("rm -rf downloads/mdc corpus", workflow)
+        self.assertIn("rm -f tests/data/common_voice_ja/transcripts*.tsv", workflow)
+        self.assertIn("rm -f tests/data/common_voice_ja/*_metrics.json", workflow)
+        self.assertIn("rm -f tests/data/common_voice_ja/mode_comparison.json", workflow)
+        artifact = workflow.split("uses: actions/upload-artifact@v4", 1)[1]
+        artifact = artifact.split("retention-days:", 1)[0]
+        self.assertIn("path: tests/data/common_voice_ja/public_metrics.json", artifact)
+        self.assertNotIn("transcripts", artifact)
+        self.assertNotIn("manifest.json", artifact)
+        self.assertNotIn("mode_comparison.json", artifact)
+        self.assertNotIn("row['case_id']", workflow)
+
+
 if __name__ == "__main__":
     unittest.main()
