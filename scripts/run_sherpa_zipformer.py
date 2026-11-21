@@ -54,6 +54,27 @@ def prepare_inference_audio(samples, source_sample_rate: int, target_sample_rate
 
 
 
+def decode_audio_chunks(recognizer, chunks):
+    """Decode every non-empty offline chunk, including the final partial chunk."""
+    results = []
+    durations = []
+    for chunk in chunks:
+        if len(chunk) == 0:
+            continue
+        stream = recognizer.create_stream()
+        stream.accept_waveform(16000, chunk)
+        # OfflineRecognizer.decode_stream() completes the supplied waveform.
+        recognizer.decode_stream(stream)
+        result = stream.result
+        results.append({
+            "text": result.text.strip(),
+            "tokens": list(getattr(result, "tokens", []) or []),
+            "timestamps": list(getattr(result, "timestamps", []) or []),
+        })
+        durations.append(float(len(chunk) / 16000))
+    return results, durations
+
+
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("manifest", type=Path)
@@ -176,27 +197,10 @@ def main() -> int:
                 )
                 chunk_start_offsets = [0.0, *overlap_starts]
             else:
-                chunk_samples = max(1, int(round(args.chunk_seconds * 16000)))
-                chunks = [inference_samples[start:start + chunk_samples]
-                          for start in range(0, len(inference_samples), chunk_samples)]
-            chunk_texts = []
-            chunk_results = []
-            chunk_durations = []
-            for chunk in chunks:
-                if chunk.size == 0:
-                    continue
-                stream = recognizer.create_stream()
-                stream.accept_waveform(16000, chunk)
-                recognizer.decode_stream(stream)
-                result = stream.result
-                text = result.text.strip()
-                chunk_texts.append(text)
-                chunk_results.append({
-                    "text": text,
-                    "tokens": list(getattr(result, "tokens", []) or []),
-                    "timestamps": list(getattr(result, "timestamps", []) or []),
-                })
-                chunk_durations.append(float(len(chunk) / 16000))
+                from audio_chunking import split_fixed_chunks
+                chunks = split_fixed_chunks(inference_samples, 16000, args.chunk_seconds)
+            chunk_results, chunk_durations = decode_audio_chunks(recognizer, chunks)
+            chunk_texts = [item["text"] for item in chunk_results]
             overlap_merge_method = "not_applicable"
             if args.chunk_overlap_seconds > 0:
                 from audio_chunking import merge_timestamped_chunks
