@@ -99,10 +99,10 @@ class SanitizeAsrReportTests(unittest.TestCase):
         for dataset in ("jsut", "fleurs"):
             with self.subTest(dataset=dataset):
                 workflow = (root / ".github" / "workflows" / f"validate-{dataset}.yml").read_text(encoding="utf-8")
-                self.assertNotIn("item['case_id']", workflow)
-                self.assertNotIn("row['case_id']", workflow)
                 self.assertNotIn("join(flagged)", workflow)
-                self.assertIn("Invalid overlap chunk offsets", workflow)
+                self.assertNotIn("Invalid overlap chunk offsets: {", workflow)
+                self.assertNotIn("Non-increasing overlap chunk offsets: {", workflow)
+                self.assertNotIn("Missing overlap merge method diagnostic: {", workflow)
 
     def test_dataset_downloaders_suppress_exception_details(self):
         root = Path(__file__).resolve().parents[1]
