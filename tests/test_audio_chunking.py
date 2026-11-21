@@ -100,9 +100,19 @@ class OverlapChunkingTests(unittest.TestCase):
             {"text": "とても良い天気ですね", "tokens": ["天気", "ですね"], "timestamps": [0, 1]},
         ]
         merged, method = merge_timestamped_chunks(results, [0.0, 4.0], [6.0, 6.0])
-        self.assertEqual(merged, "今日はとても良い天気ですね")
+        self.assertEqual(merged, "今日はとても良い天気とても良い天気ですね")
         self.assertEqual(method, "text_fallback")
 
+
+    def test_timestamp_fallback_preserves_a_genuinely_repeated_phrase(self):
+        phrase = "同じ内容をもう一度話す"
+        results = [
+            {"text": phrase, "tokens": ["不一致"], "timestamps": [0]},
+            {"text": phrase, "tokens": ["不一致"], "timestamps": [0]},
+        ]
+        merged, method = merge_timestamped_chunks(results, [0.0, 2.0], [3.0, 3.0])
+        self.assertEqual(merged, phrase + phrase)
+        self.assertEqual(method, "text_fallback")
 
     def test_timestamp_merge_falls_back_on_non_finite_timestamp(self):
         results = [
