@@ -19,11 +19,15 @@ def main() -> int:
                    help="Optionally amplify low-RMS audio toward this RMS dBFS target; no attenuation is applied")
     p.add_argument("--max-gain-db", type=float, default=12.0,
                    help="Maximum gain for optional RMS normalization (default: 12 dB)")
+    p.add_argument("--chunk-seconds", type=float, default=None,
+                   help="Decode each audio independently in fixed-size chunks; omit for whole-utterance decoding")
     args = p.parse_args()
     if args.threads < 1:
         p.error("--threads must be >= 1")
     if args.max_gain_db < 0:
         p.error("--max-gain-db must be >= 0")
+    if args.chunk_seconds is not None and args.chunk_seconds <= 0:
+        p.error("--chunk-seconds must be > 0")
     if args.normalize_rms_dbfs is not None and not -90 <= args.normalize_rms_dbfs <= 0:
         p.error("--normalize-rms-dbfs must be between -90 and 0 dBFS")
 
@@ -63,7 +67,7 @@ def main() -> int:
         "case_id", "category", "reference", "hypothesis",
         "audio_duration_seconds", "audio_rms", "audio_peak",
         "near_silence_fraction", "clipping_fraction",
-        "source_sample_rate", "source_channels", "applied_gain_db", "inference_audio_rms",
+        "source_sample_rate", "source_channels", "applied_gain_db", "inference_audio_rms", "inference_chunks",
     ]
     args.output_tsv.parent.mkdir(parents=True, exist_ok=True)
     with args.output_tsv.open("w", encoding="utf-8", newline="") as f:
@@ -95,10 +99,22 @@ def main() -> int:
                 from math import gcd
                 g = gcd(int(sr), 16000)
                 mono = resample_poly(mono, 16000 // g, int(sr) // g).astype(np.float32)
-            stream = recognizer.create_stream()
-            stream.accept_waveform(16000, np.asarray(mono, dtype=np.float32))
-            recognizer.decode_stream(stream)
-            hypothesis = stream.result.text.replace("\t", " ").replace("\r", " ").replace("\n", " ").strip()
+            inference_samples = np.asarray(mono, dtype=np.float32)
+            if args.chunk_seconds is None:
+                chunks = [inference_samples]
+            else:
+                chunk_samples = max(1, int(round(args.chunk_seconds * 16000)))
+                chunks = [inference_samples[start:start + chunk_samples]
+                          for start in range(0, len(inference_samples), chunk_samples)]
+            chunk_texts = []
+            for chunk in chunks:
+                if chunk.size == 0:
+                    continue
+                stream = recognizer.create_stream()
+                stream.accept_waveform(16000, chunk)
+                recognizer.decode_stream(stream)
+                chunk_texts.append(stream.result.text.strip())
+            hypothesis = "".join(chunk_texts).replace("\t", " ").replace("\r", " ").replace("\n", " ").strip()
             reference = str(item["reference"]).replace("\t", " ").replace("\r", " ").replace("\n", " ").strip()
             writer.writerow({
                 "case_id": str(item["case_id"]), "category": str(item.get("category", "")),
@@ -110,10 +126,12 @@ def main() -> int:
                 "source_sample_rate": int(sr), "source_channels": channels,
                 "applied_gain_db": f"{20.0 * np.log10(gain):.4f}",
                 "inference_audio_rms": f"{inference_rms:.8f}",
+                "inference_chunks": len(chunks),
             })
     print(json.dumps({"decoded": len(entries), "output_tsv": str(args.output_tsv),
                       "normalization": {"target_rms_dbfs": args.normalize_rms_dbfs,
                                         "max_gain_db": args.max_gain_db if args.normalize_rms_dbfs is not None else 0},
+                      "chunk_seconds": args.chunk_seconds,
                       "diagnostics": fields[4:]}, ensure_ascii=False))
     return 0
 
