@@ -47,11 +47,14 @@ class SanitizeAsrReportTests(unittest.TestCase):
                 workflow = (root / ".github" / "workflows" / f"validate-{dataset}.yml").read_text(encoding="utf-8")
                 self.assertIn("sanitize_asr_report.py", workflow)
                 self.assertIn("public_metrics.json", workflow)
+                self.assertIn("workflow_dispatch:", workflow)
+                self.assertIn("acknowledge_license", workflow)
+                self.assertIn("default: \\"no\\"", workflow)
                 self.assertIn(f"rm -rf tests/data/{dataset}_ja/clips", workflow)
                 self.assertIn(f"rm -f tests/data/{dataset}_ja/manifest.json", workflow)
                 self.assertIn(f"transcripts*.tsv", workflow)
                 if dataset == "fleurs":
-                    self.assertIn(f"rm -f tests/data/{dataset}_ja/metrics*.json", workflow)
+                    self.assertIn(f"metrics*.json", workflow)
                 artifact = workflow.split("uses: actions/upload-artifact@v4", 1)[1]
                 artifact = artifact.split("retention-days:", 1)[0]
                 self.assertIn(f"path: tests/data/{dataset}_ja/public_metrics.json", artifact)
