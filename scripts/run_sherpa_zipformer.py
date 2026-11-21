@@ -8,6 +8,52 @@ import sys
 from pathlib import Path
 
 
+
+def prepare_inference_audio(samples, source_sample_rate: int, target_sample_rate: int = 16000):
+    """Convert finite mono/stereo audio to finite float32 at the model sample rate.
+
+    If averaging stereo channels would nearly cancel an anti-phase signal,
+    retain the higher-energy channel instead of feeding near-silence to ASR.
+    """
+    import numpy as np
+    from math import gcd
+    from scipy.signal import resample_poly
+
+    audio = np.asarray(samples)
+    if audio.ndim not in (1, 2):
+        raise ValueError("audio must be mono or (frames, channels)")
+    if audio.ndim == 2 and audio.shape[1] < 1:
+        raise ValueError("audio must contain at least one channel")
+    if audio.shape[0] == 0:
+        raise ValueError("audio must contain at least one frame")
+    if np.issubdtype(audio.dtype, np.inexact) and not np.isfinite(audio).all():
+        raise ValueError("audio must contain only finite samples")
+    if source_sample_rate <= 0 or target_sample_rate <= 0:
+        raise ValueError("sample rates must be positive")
+
+    audio = np.asarray(audio, dtype=np.float32)
+    if audio.ndim == 2:
+        channels = [audio[:, index] for index in range(audio.shape[1])]
+        mono = np.mean(audio, axis=1, dtype=np.float64).astype(np.float32)
+        channel_rms = [float(np.sqrt(np.mean(np.square(ch, dtype=np.float64)))) for ch in channels]
+        mean_rms = float(np.sqrt(np.mean(np.square(mono, dtype=np.float64))))
+        max_channel_rms = max(channel_rms, default=0.0)
+        if max_channel_rms > 0 and mean_rms < 0.25 * max_channel_rms:
+            mono = channels[int(np.argmax(channel_rms))].copy()
+    else:
+        mono = audio.copy()
+
+    if source_sample_rate != target_sample_rate:
+        divisor = gcd(int(source_sample_rate), int(target_sample_rate))
+        mono = resample_poly(
+            mono, target_sample_rate // divisor, source_sample_rate // divisor
+        ).astype(np.float32)
+    if mono.size == 0 or not np.isfinite(mono).all():
+        raise ValueError("prepared inference audio is empty or non-finite")
+    return np.asarray(mono, dtype=np.float32)
+
+
+
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("manifest", type=Path)
@@ -94,6 +140,8 @@ def main() -> int:
                 raise SystemExit(f"Audio missing: {audio_path}")
             samples, sr = sf.read(str(audio_path), dtype="float32", always_2d=True)
             channels = int(samples.shape[1])
+            if sr <= 0:
+                raise SystemExit(f"Invalid sample rate: {audio_path}")
             mono = samples.mean(axis=1)
             if mono.size == 0:
                 raise SystemExit(f"Audio is empty: {audio_path}")
@@ -110,11 +158,7 @@ def main() -> int:
                     gain = min(gain, 0.95 / peak) if peak > 0 else gain
                     mono = mono * np.float32(gain)
             inference_rms = float(np.sqrt(np.mean(np.square(mono, dtype=np.float64))))
-            if sr != 16000:
-                from math import gcd
-                g = gcd(int(sr), 16000)
-                mono = resample_poly(mono, 16000 // g, int(sr) // g).astype(np.float32)
-            inference_samples = np.asarray(mono, dtype=np.float32)
+            inference_samples = prepare_inference_audio(samples, int(sr), 16000)
             boundaries = []
             chunk_start_offsets = [0.0]
             if args.silence_aware_chunk_seconds is not None:
