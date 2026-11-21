@@ -24,6 +24,9 @@ class SanitizeAsrReportTests(unittest.TestCase):
             "transcripts": ["private text"],
             "audio_path": "/tmp/private.wav",
         }
+        report["category_summary"]["private-utterance-id"] = {
+            "case_count": 1, "cer": 0.9, "reference": "private text"
+        }
         safe = sanitize_metrics(report)
         self.assertEqual(safe["case_count"], 3)
         self.assertEqual(safe["character_error_rate"], 0.2)
@@ -32,6 +35,9 @@ class SanitizeAsrReportTests(unittest.TestCase):
         self.assertNotIn("audio_path", safe)
         self.assertNotIn("reference", safe)
         self.assertNotIn("hypothesis", safe)
+        self.assertNotIn("private-utterance-id", safe["category_summary"])
+        self.assertEqual(safe["category_summary"]["short"]["case_count"], 1)
+        self.assertNotIn("reference", safe["category_summary"]["short"])
 
 
 if __name__ == "__main__":
