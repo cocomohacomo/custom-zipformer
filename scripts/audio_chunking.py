@@ -1,6 +1,7 @@
 """Silence-aware chunk boundary selection for long-form audio."""
 from __future__ import annotations
 
+import math
 import numpy as np
 
 
@@ -99,6 +100,18 @@ def merge_timestamped_chunks(
         return "", "empty"
     if not (len(chunk_start_seconds) == len(chunk_durations_seconds) == count):
         return merge_overlapping_text([str(item.get("text", "")) for item in chunk_results]), "text_fallback"
+    # Invalid timing metadata must never silently discard tokens at a seam.
+    try:
+        starts = [float(value) for value in chunk_start_seconds]
+        durations = [float(value) for value in chunk_durations_seconds]
+    except (TypeError, ValueError):
+        return merge_overlapping_text([str(item.get("text", "")) for item in chunk_results]), "text_fallback"
+    if any(not math.isfinite(value) for value in starts + durations):
+        return merge_overlapping_text([str(item.get("text", "")) for item in chunk_results]), "text_fallback"
+    if any(value <= 0 for value in durations):
+        return merge_overlapping_text([str(item.get("text", "")) for item in chunk_results]), "text_fallback"
+    if starts[0] < 0 or any(right <= left for left, right in zip(starts, starts[1:])):
+        return merge_overlapping_text([str(item.get("text", "")) for item in chunk_results]), "text_fallback"
     normalized = []
     for index, item in enumerate(chunk_results):
         text = str(item.get("text", "")).strip()
@@ -110,7 +123,7 @@ def merge_timestamped_chunks(
             times = [float(value) for value in timestamps]
         except (TypeError, ValueError):
             return merge_overlapping_text([str(x.get("text", "")) for x in chunk_results]), "text_fallback"
-        if any(value < 0 or value > chunk_durations_seconds[index] + 0.25 for value in times):
+        if any(not math.isfinite(value) or value < 0 or value > durations[index] + 0.25 for value in times):
             return merge_overlapping_text([str(x.get("text", "")) for x in chunk_results]), "text_fallback"
         if any(right < left for left, right in zip(times, times[1:])):
             return merge_overlapping_text([str(x.get("text", "")) for x in chunk_results]), "text_fallback"
@@ -122,8 +135,8 @@ def merge_timestamped_chunks(
     lower_bounds = [float("-inf")] * count
     upper_bounds = [float("inf")] * count
     for index in range(count - 1):
-        previous_end = chunk_start_seconds[index] + chunk_durations_seconds[index]
-        next_start = chunk_start_seconds[index + 1]
+        previous_end = starts[index] + durations[index]
+        next_start = starts[index + 1]
         if next_start >= previous_end:
             continue
         seam = (next_start + previous_end) / 2.0
@@ -132,7 +145,7 @@ def merge_timestamped_chunks(
 
     merged_tokens = []
     for index, (tokens, times) in enumerate(normalized):
-        start = chunk_start_seconds[index]
+        start = starts[index]
         for token, timestamp in zip(tokens, times):
             absolute_time = start + timestamp
             if lower_bounds[index] <= absolute_time < upper_bounds[index]:
