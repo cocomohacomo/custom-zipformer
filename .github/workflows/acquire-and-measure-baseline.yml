@@ -84,9 +84,9 @@ jobs:
               raise SystemExit("Prepared manifest is empty or copied count is inconsistent.")
           if len(rows) > int(os.environ["SAMPLE_LIMIT"]):
               raise SystemExit("Prepared sample exceeds SAMPLE_LIMIT.")
-          missing = [item["audio"] for item in rows if not (root / item["audio"]).is_file()]
-          if missing:
-              raise SystemExit(f"Prepared audio files are missing: {missing[:5]}")
+          missing_count = sum(not (root / item["audio"]).is_file() for item in rows)
+          if missing_count:
+              raise SystemExit(f"Prepared audio files are missing: {missing_count}")
           print(f"Prepared {len(rows)} verified clips (requested maximum: {data['requested']}).")
           PY
       - name: Download public Japanese Zipformer comparison model
@@ -212,33 +212,37 @@ jobs:
               chunk_count = int(row["inference_chunks"])
               starts = [float(value) for value in row["chunk_start_offsets_seconds"].split(",") if value]
               if len(starts) != chunk_count or not starts or starts[0] != 0.0:
-                  raise SystemExit(f"Invalid overlap chunk-start offsets for {row['case_id']}.")
+                  raise SystemExit("Invalid overlap chunk-start offsets.")
               if any(right <= left for left, right in zip(starts, starts[1:])):
-                  raise SystemExit(f"Non-increasing overlap chunk starts for {row['case_id']}.")
+                  raise SystemExit("Non-increasing overlap chunk starts.")
           print(f"Validated raw, normalized, fixed-chunk, silence-aware, and overlap metrics for {report['case_count']} clips.")
           PY
-      - name: Save baseline artifacts
+      - name: Sanitize output to aggregate-only metrics
+        if: always()
+        run: |
+          python scripts/sanitize_asr_report.py \
+            --root tests/data/common_voice_ja \
+            --comparison mode_comparison.json \
+            --extra-report rms_normalized=normalized_metrics.json \
+            --output tests/data/common_voice_ja/public_metrics.json
+      - name: Remove downloaded audio, cache, manifests, and raw reports
+        if: always()
+        run: |
+          rm -rf tests/data/common_voice_ja/clips
+          rm -rf downloads/mdc corpus
+          rm -rf ~/.cache/huggingface/hub/datasets--mozilla-foundation--common_voice_17_0
+          rm -rf models/zipformer-ja
+          rm -f downloads/zipformer-ja.tar.bz2
+          rm -f tests/data/common_voice_ja/manifest.json
+          rm -f tests/data/common_voice_ja/transcripts*.tsv
+          rm -f tests/data/common_voice_ja/*_metrics.json
+          rm -f tests/data/common_voice_ja/*.stdout.json
+          rm -f tests/data/common_voice_ja/mode_comparison.json
+      - name: Upload sanitized aggregate metrics only
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: japanese-zipformer-baseline-${{ github.run_id }}
-          path: |
-            tests/data/common_voice_ja/manifest.json
-            tests/data/common_voice_ja/transcripts.tsv
-            tests/data/common_voice_ja/baseline_metrics.json
-            tests/data/common_voice_ja/metrics.stdout.json
-            tests/data/common_voice_ja/transcripts_rms_normalized.tsv
-            tests/data/common_voice_ja/normalized_metrics.json
-            tests/data/common_voice_ja/normalized_metrics.stdout.json
-            tests/data/common_voice_ja/transcripts_chunked_15s.tsv
-            tests/data/common_voice_ja/chunked_15s_metrics.json
-            tests/data/common_voice_ja/chunked_15s_metrics.stdout.json
-            tests/data/common_voice_ja/transcripts_silence_aware_15s.tsv
-            tests/data/common_voice_ja/silence_aware_15s_metrics.json
-            tests/data/common_voice_ja/silence_aware_15s_metrics.stdout.json
-            tests/data/common_voice_ja/transcripts_overlap_2s.tsv
-            tests/data/common_voice_ja/overlap_2s_metrics.json
-            tests/data/common_voice_ja/overlap_2s_metrics.stdout.json
-            tests/data/common_voice_ja/mode_comparison.json
+          name: japanese-zipformer-aggregate-${{ github.run_id }}
+          path: tests/data/common_voice_ja/public_metrics.json
           if-no-files-found: warn
           retention-days: 30
