@@ -70,11 +70,11 @@ class ValidateAsrEvaluationTests(unittest.TestCase):
             self._write_fixture(root)
             path = root / MODES["fixed_15s"][0]
             with path.open(encoding="utf-8", newline="") as stream:
-                rows = list(csv.DictReader(stream, delimiter="\\t"))
+                rows = list(csv.DictReader(stream, delimiter=chr(9)))
             for row in rows:
                 row["inference_chunks"] = "1"
             with path.open("w", encoding="utf-8", newline="") as stream:
-                writer = csv.DictWriter(stream, fieldnames=list(rows[0]), delimiter="\\t")
+                writer = csv.DictWriter(stream, fieldnames=list(rows[0]), delimiter=chr(9))
                 writer.writeheader()
                 writer.writerows(rows)
             with self.assertRaisesRegex(ValueError, "fixed chunk count"):
