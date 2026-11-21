@@ -21,16 +21,21 @@ class ValidateAsrEvaluationTests(unittest.TestCase):
         for mode, (transcript_name, metrics_name) in MODES.items():
             with (root / transcript_name).open("w", encoding="utf-8", newline="") as stream:
                 writer = csv.DictWriter(stream, fieldnames=[
-                    "case_id", "hypothesis", "inference_chunks",
-                    "chunk_start_offsets_seconds", "overlap_merge_method",
+                    "case_id", "hypothesis", "audio_duration_seconds", "inference_chunks",
+                    "inference_short_chunks_lt_25ms", "inference_silent_chunks",
+                    "chunk_boundaries_seconds", "chunk_start_offsets_seconds", "overlap_merge_method",
                 ], delimiter="\t")
                 writer.writeheader()
                 for index, case_id in enumerate(ids):
                     writer.writerow({
                         "case_id": case_id,
                         "hypothesis": "" if index == 0 else "認識結果",
-                        "inference_chunks": "2",
-                        "chunk_start_offsets_seconds": "0.0,13.0",
+                        "audio_duration_seconds": "30.0",
+                        "inference_chunks": "1" if mode == "whole" else "2",
+                        "inference_short_chunks_lt_25ms": "0",
+                        "inference_silent_chunks": "0",
+                        "chunk_boundaries_seconds": "15.0" if mode == "silence_aware_15s" else "",
+                        "chunk_start_offsets_seconds": "0.0,13.0" if mode == "overlap_2s" else "0.0",
                         "overlap_merge_method": "timestamp",
                     })
             report = {
@@ -54,6 +59,9 @@ class ValidateAsrEvaluationTests(unittest.TestCase):
                 self.assertEqual(result["modes"][mode]["empty_hypotheses"], 1)
                 self.assertEqual(result["modes"][mode]["complete_omissions"], 1)
             self.assertEqual(result["modes"]["overlap_2s"]["overlap_merge_methods"], {"timestamp": 2})
+            self.assertEqual(result["modes"]["whole"]["chunking"]["multi_chunk_cases"], 0)
+            self.assertEqual(result["modes"]["fixed_15s"]["chunking"]["multi_chunk_cases"], 2)
+            self.assertEqual(result["modes"]["silence_aware_15s"]["chunking"]["total_chunks"], 4)
 
     def test_cli_emits_aggregate_only_output(self):
         with tempfile.TemporaryDirectory() as directory:
