@@ -35,9 +35,9 @@ class FleursSubsetTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "dev.tsv"
             path.write_text(
-                "id\\tfile_name\\ttranscription\\n"
-                "1\\tPRIVATE_FLEURS_FILE.wav\\tこんにちは\\n"
-                "2\\tPRIVATE_FLEURS_FILE.wav\\tこんばんは\\n",
+                "id\tfile_name\ttranscription\n"
+                "1\tPRIVATE_FLEURS_FILE.wav\tこんにちは\n"
+                "2\tPRIVATE_FLEURS_FILE.wav\tこんばんは\n",
                 encoding="utf-8",
             )
             with self.assertRaises(ValueError) as caught:
