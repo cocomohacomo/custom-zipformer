@@ -25,6 +25,12 @@ class JsutDatasetPreparationTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             parse_transcripts("not-a-transcript-line")
 
+    def test_duplicate_id_error_does_not_echo_private_identifier(self):
+        with self.assertRaises(ValueError) as caught:
+            parse_transcripts("PRIVATE_JSUT_ID:文章\\nPRIVATE_JSUT_ID:重複")
+        self.assertNotIn("PRIVATE_JSUT_ID", str(caught.exception))
+
+
     def test_length_categories(self):
         self.assertEqual(classify("短文です。"), "short")
         self.assertEqual(classify("これは中くらいの長さの評価用文章です。"), "medium")
