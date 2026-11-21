@@ -150,6 +150,8 @@ class SanitizeAsrReportTests(unittest.TestCase):
             with self.subTest(dataset=dataset):
                 workflow = (root / ".github" / "workflows" / f"validate-{dataset}.yml").read_text(encoding="utf-8")
                 self.assertIn("sanitize_asr_report.py", workflow)
+                self.assertIn("validate_asr_evaluation.py", workflow)
+                self.assertNotIn("Fail on complete, near-complete, or severe deletion", workflow)
                 self.assertIn("--report whole=metrics.json", workflow)
                 self.assertIn("if: success()", workflow)
                 self.assertIn("public_metrics.json", workflow)
