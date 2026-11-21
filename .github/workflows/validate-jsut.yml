@@ -1,4 +1,5 @@
 name: validate-japanese-asr-with-jsut
+run-name: JSUT ASR validation (${{ github.ref_name }}, ${{ inputs.sample_limit }} samples)
 
 on:
   workflow_dispatch:
@@ -6,8 +7,8 @@ on:
       sample_limit:
         description: Number of JSUT utterances (maximum 500)
         required: true
-        default: "100"
-        type: string
+        default: 100
+        type: number
       acknowledge_license:
         description: Confirm JSUT research/personal-use terms and no audio redistribution
         required: true
@@ -31,26 +32,49 @@ jobs:
     timeout-minutes: 180
     steps:
       - uses: actions/checkout@v4
+      - name: Record safe run metadata
+        env:
+          SAMPLE_LIMIT: ${{ inputs.sample_limit }}
+        run: |
+          python - <<'PY'
+          import os
+          value = os.environ["SAMPLE_LIMIT"]
+          try:
+              limit = int(value)
+          except (TypeError, ValueError):
+              raise SystemExit("sample_limit must be an integer")
+          if not 1 <= limit <= 500:
+              raise SystemExit("sample_limit must be between 1 and 500")
+          print("JSUT evaluation configuration validated.")
+          PY
+          echo "Branch: ${GITHUB_REF_NAME}"
+          echo "Commit: ${GITHUB_SHA}"
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
       - name: Install JSUT downloader and inference dependencies
         run: python -m pip install --upgrade pip huggingface_hub sherpa-onnx soundfile scipy numpy
       - name: Download deterministic JSUT evaluation subset
+        env:
+          SAMPLE_LIMIT: ${{ inputs.sample_limit }}
         run: |
-          python scripts/download_jsut_subset.py --limit "${{ inputs.sample_limit }}" --output tests/data/jsut_ja
+          python scripts/download_jsut_subset.py --limit "$SAMPLE_LIMIT" --output tests/data/jsut_ja
           python - <<'PY'
           import json
           from pathlib import Path
           root = Path("tests/data/jsut_ja")
           data = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
-          if data["copied"] < 1 or data["copied"] > int("${{ inputs.sample_limit }}"):
+          copied = data.get("copied")
+          entries = data.get("manifest")
+          if not isinstance(copied, int) or isinstance(copied, bool) or not 1 <= copied <= int("${{ inputs.sample_limit }}"):
               raise SystemExit("JSUT subset size is invalid")
-          for item in data["manifest"]:
+          if not isinstance(entries, list) or len(entries) != copied:
+              raise SystemExit("JSUT manifest count is invalid")
+          for item in entries:
               audio = root / item["audio"]
               if not audio.is_file() or audio.stat().st_size == 0:
                   raise SystemExit("Missing or empty JSUT audio file")
-          print(f"Verified {data['copied']} JSUT audio/transcript pairs.")
+          print(f"Verified {copied} JSUT audio/transcript pairs.")
           PY
       - name: Download public Japanese Zipformer model
         run: |
@@ -93,7 +117,7 @@ jobs:
           python scripts/sanitize_asr_report.py --root tests/data/jsut_ja --comparison mode_comparison.json \
             --report whole=metrics.json \
             --report fixed_15s=metrics_chunked_15s.json \
-            --report silence_aware_15s=metrics_silence_aware_15s.json \
+            --report silence_aware=metrics_silence_aware_15s.json \
             --report overlap_2s=metrics_overlap_2s.json \
             --output tests/data/jsut_ja/public_metrics.json
       - name: Remove local licensed audio and raw reports
@@ -104,6 +128,7 @@ jobs:
           rm -f tests/data/jsut_ja/manifest.json tests/data/jsut_ja/transcripts*.tsv
           rm -f tests/data/jsut_ja/metrics*.stdout.json tests/data/jsut_ja/metrics*.json
           rm -f tests/data/jsut_ja/mode_comparison.json
+          rm -rf downloads models/zipformer-ja
       - name: Upload sanitized aggregate metrics only
         if: success()
         uses: actions/upload-artifact@v4
