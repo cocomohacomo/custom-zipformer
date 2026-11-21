@@ -1,9 +1,14 @@
+import contextlib
+import io
+import json
 import sys
+import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-from sanitize_asr_report import sanitize_comparisons, sanitize_metrics
+from sanitize_asr_report import main, sanitize_comparisons, sanitize_metrics
 
 
 class SanitizeAsrReportTests(unittest.TestCase):
