@@ -7,6 +7,8 @@ This script downloads only the selected WAVs and does not redistribute them.
 from __future__ import annotations
 
 import argparse
+import contextlib
+import io
 import hashlib
 import json
 import random
@@ -129,7 +131,8 @@ def main() -> int:
     if not 1 <= args.limit <= 500:
         parser.error("--limit must be between 1 and 500")
     try:
-        metadata = prepare_dataset(args.limit, args.output, args.seed)
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            metadata = prepare_dataset(args.limit, args.output, args.seed)
     except Exception:
         print("JSUT dataset preparation failed; detailed source information is suppressed.")
         return 1
