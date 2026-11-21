@@ -279,5 +279,20 @@ class SanitizeAsrReportTests(unittest.TestCase):
         self.assertNotIn("row['case_id']", workflow)
 
 
+    def test_silence_aware_comparison_alias_is_exported_canonically(self):
+        safe = sanitize_comparisons({
+            "paired_comparisons": {
+                "silence_aware": {
+                    "baseline": "whole", "deletion_delta": -3, "cer_delta": -0.01,
+                    "cases_with_fewer_deletions": 2, "cases_with_more_deletions": 0,
+                    "cases_unchanged": 8,
+                }
+            }
+        })
+        self.assertIn("silence_aware_15s", safe)
+        self.assertNotIn("silence_aware", safe)
+        self.assertEqual(safe["silence_aware_15s"]["deletion_delta"], -3)
+
+
 if __name__ == "__main__":
     unittest.main()
