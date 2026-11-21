@@ -88,7 +88,7 @@ class OverlapChunkingTests(unittest.TestCase):
     def test_timestamp_merge_assigns_overlap_to_midpoint(self):
         results = [
             {"text": "abcdef", "tokens": list("abcdef"), "timestamps": [0, 1, 2, 3, 4, 5]},
-            {"text": "defghi", "tokens": list("defghi"), "timestamps": [0, 1, 2, 3, 4, 5]},
+            {"text": "defghi", "tokens": list("defghi"), "timestamps": [0, 0.2, 1, 2, 3, 4]},
         ]
         merged, method = merge_timestamped_chunks(results, [0.0, 4.0], [6.0, 6.0])
         self.assertEqual(merged, "abcdefghi")
@@ -96,11 +96,11 @@ class OverlapChunkingTests(unittest.TestCase):
 
     def test_timestamp_merge_falls_back_when_tokens_do_not_reconstruct_text(self):
         results = [
-            {"text": "今日はとても晴れ", "tokens": ["今日は", "晴れ"], "timestamps": [0, 1]},
-            {"text": "とても晴れですね", "tokens": ["晴れ", "ですね"], "timestamps": [0, 1]},
+            {"text": "今日はとても良い天気", "tokens": ["今日は", "天気"], "timestamps": [0, 1]},
+            {"text": "とても良い天気ですね", "tokens": ["天気", "ですね"], "timestamps": [0, 1]},
         ]
         merged, method = merge_timestamped_chunks(results, [0.0, 4.0], [6.0, 6.0])
-        self.assertEqual(merged, "今日はとても晴れですね")
+        self.assertEqual(merged, "今日はとても良い天気ですね")
         self.assertEqual(method, "text_fallback")
 
     def test_timestamp_merge_falls_back_on_non_monotonic_times(self):
