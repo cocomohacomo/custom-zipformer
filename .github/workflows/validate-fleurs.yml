@@ -122,17 +122,24 @@ jobs:
                     f"severe={report['severe_deletion']['count']}")
           print(f"Validated {len(expected)} paired FLEURS utterances across four inference modes.")
           PY
-      - name: Upload aggregate metrics only (no audio, transcripts, or manifest)
+      - name: Sanitize output to aggregate-only metrics
+        if: always()
+        run: |
+          python scripts/sanitize_asr_report.py --root tests/data/fleurs_ja --comparison mode_comparison.json --output tests/data/fleurs_ja/public_metrics.json
+      - name: Remove local licensed audio and raw reports
+        if: always()
+        run: |
+          rm -rf tests/data/fleurs_ja/clips
+          rm -rf ~/.cache/huggingface/hub/datasets--google--fleurs
+          rm -f tests/data/fleurs_ja/manifest.json tests/data/fleurs_ja/transcripts*.tsv
+          rm -f tests/data/fleurs_ja/metrics*.stdout.json tests/data/fleurs_ja/metrics*.json
+          rm -f tests/data/fleurs_ja/mode_comparison.json
+      - name: Upload sanitized aggregate metrics only
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: fleurs-asr-metrics-${{ github.run_id }}
-          path: |
-            tests/data/fleurs_ja/metrics.json
-            tests/data/fleurs_ja/metrics_chunked_15s.json
-            tests/data/fleurs_ja/metrics_silence_aware_15s.json
-            tests/data/fleurs_ja/metrics_overlap_2s.json
-            tests/data/fleurs_ja/mode_comparison.json
+          name: fleurs-asr-aggregate-${{ github.run_id }}
+          path: tests/data/fleurs_ja/public_metrics.json
           if-no-files-found: warn
           retention-days: 30
   license-not-acknowledged:
