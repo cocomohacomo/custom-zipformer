@@ -1,4 +1,5 @@
 name: validate-japanese-asr-with-jsut
+run-name: JSUT ASR validation (${{ github.ref_name }}, ${{ inputs.sample_limit }} samples)
 
 on:
   workflow_dispatch:
@@ -6,8 +7,8 @@ on:
       sample_limit:
         description: Number of JSUT utterances (maximum 500)
         required: true
-        default: "100"
-        type: string
+        default: 100
+        type: number
       acknowledge_license:
         description: Confirm JSUT research/personal-use terms and no audio redistribution
         required: true
@@ -31,26 +32,50 @@ jobs:
     timeout-minutes: 180
     steps:
       - uses: actions/checkout@v4
+      - name: Record safe run metadata
+        env:
+          SAMPLE_LIMIT: ${{ inputs.sample_limit }}
+        run: |
+          python - <<'PY'
+          import os
+          try:
+              limit = int(os.environ["SAMPLE_LIMIT"])
+          except (KeyError, TypeError, ValueError):
+              raise SystemExit("sample_limit must be an integer")
+          if not 1 <= limit <= 500:
+              raise SystemExit("sample_limit must be between 1 and 500")
+          print("JSUT evaluation configuration validated.")
+          PY
+          echo "Branch: ${GITHUB_REF_NAME}"
+          echo "Commit: ${GITHUB_SHA}"
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
       - name: Install JSUT downloader and inference dependencies
         run: python -m pip install --upgrade pip huggingface_hub sherpa-onnx soundfile scipy numpy
       - name: Download deterministic JSUT evaluation subset
+        env:
+          SAMPLE_LIMIT: ${{ inputs.sample_limit }}
         run: |
-          python scripts/download_jsut_subset.py --limit "${{ inputs.sample_limit }}" --output tests/data/jsut_ja
+          python scripts/download_jsut_subset.py --limit "$SAMPLE_LIMIT" --output tests/data/jsut_ja
           python - <<'PY'
           import json
+          import os
           from pathlib import Path
           root = Path("tests/data/jsut_ja")
           data = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
-          if data["copied"] < 1 or data["copied"] > int("${{ inputs.sample_limit }}"):
+          copied = data.get("copied")
+          entries = data.get("manifest")
+          limit = int(os.environ["SAMPLE_LIMIT"])
+          if not isinstance(copied, int) or isinstance(copied, bool) or not 1 <= copied <= limit:
               raise SystemExit("JSUT subset size is invalid")
-          for item in data["manifest"]:
+          if not isinstance(entries, list) or len(entries) != copied:
+              raise SystemExit("JSUT manifest count is invalid")
+          for item in entries:
               audio = root / item["audio"]
               if not audio.is_file() or audio.stat().st_size == 0:
-                  raise SystemExit(f"Missing/empty audio: {item['case_id']}")
-          print(f"Verified {data['copied']} JSUT audio/transcript pairs.")
+                  raise SystemExit("Missing or empty JSUT audio file")
+          print(f"Verified {copied} JSUT audio/transcript pairs.")
           PY
       - name: Download public Japanese Zipformer model
         run: |
@@ -61,17 +86,13 @@ jobs:
             find models/zipformer-ja -type f -name "$pattern" -print -quit | grep -q . || { echo "::error::Missing model file matching $pattern"; exit 1; }
           done
       - name: Run whole-utterance inference
-        run: |
-          python scripts/run_sherpa_zipformer.py tests/data/jsut_ja/manifest.json --model-dir models/zipformer-ja --threads 2 --output-tsv tests/data/jsut_ja/transcripts.tsv
+        run: python scripts/run_sherpa_zipformer.py tests/data/jsut_ja/manifest.json --model-dir models/zipformer-ja --threads 2 --output-tsv tests/data/jsut_ja/transcripts.tsv
       - name: Run fixed 15-second chunk comparison
-        run: |
-          python scripts/run_sherpa_zipformer.py tests/data/jsut_ja/manifest.json --model-dir models/zipformer-ja --threads 2 --chunk-seconds 15 --output-tsv tests/data/jsut_ja/transcripts_chunked_15s.tsv
+        run: python scripts/run_sherpa_zipformer.py tests/data/jsut_ja/manifest.json --model-dir models/zipformer-ja --threads 2 --chunk-seconds 15 --output-tsv tests/data/jsut_ja/transcripts_chunked_15s.tsv
       - name: Run silence-aware chunk comparison
-        run: |
-          python scripts/run_sherpa_zipformer.py tests/data/jsut_ja/manifest.json --model-dir models/zipformer-ja --threads 2 --silence-aware-chunk-seconds 15 --chunk-search-window-seconds 2 --output-tsv tests/data/jsut_ja/transcripts_silence_aware_15s.tsv
+        run: python scripts/run_sherpa_zipformer.py tests/data/jsut_ja/manifest.json --model-dir models/zipformer-ja --threads 2 --silence-aware-chunk-seconds 15 --chunk-search-window-seconds 2 --output-tsv tests/data/jsut_ja/transcripts_silence_aware_15s.tsv
       - name: Run 2-second overlap comparison
-        run: |
-          python scripts/run_sherpa_zipformer.py tests/data/jsut_ja/manifest.json --model-dir models/zipformer-ja --threads 2 --chunk-seconds 15 --chunk-overlap-seconds 2 --output-tsv tests/data/jsut_ja/transcripts_overlap_2s.tsv
+        run: python scripts/run_sherpa_zipformer.py tests/data/jsut_ja/manifest.json --model-dir models/zipformer-ja --threads 2 --chunk-seconds 15 --chunk-overlap-seconds 2 --output-tsv tests/data/jsut_ja/transcripts_overlap_2s.tsv
       - name: Calculate metrics
         run: |
           for mode in "" "_chunked_15s" "_silence_aware_15s" "_overlap_2s"; do
@@ -85,77 +106,32 @@ jobs:
             --report silence_aware=tests/data/jsut_ja/metrics_silence_aware_15s.json \
             --report overlap_2s=tests/data/jsut_ja/metrics_overlap_2s.json \
             --output-json tests/data/jsut_ja/mode_comparison.json
-      - name: Fail on complete, near-complete, or severe deletion
+      - name: Validate paired inference outputs and report omissions
+        run: python scripts/validate_asr_evaluation.py --root tests/data/jsut_ja --output-json tests/data/jsut_ja/execution_diagnostics.json
+      - name: Sanitize output to aggregate-only metrics
+        if: success()
         run: |
-          python - <<'PY'
-          import json
-          from pathlib import Path
-          root = Path("tests/data/jsut_ja")
-          failures = []
-          for mode in ("", "_chunked_15s", "_silence_aware_15s", "_overlap_2s"):
-              report = json.loads((root / f"metrics{mode}.json").read_text(encoding="utf-8"))
-              cases = report.get("cases", [])
-              flagged = [
-                  item["case_id"] for item in cases
-                  if item.get("complete_omission")
-                  or item.get("near_complete_omission")
-                  or item.get("severe_deletion")
-              ]
-              print(
-                  f"{mode or 'whole'}: complete={report.get('complete_omission', {}).get('empty_hypothesis_count', 0)}, "
-                  f"near-complete={report.get('near_complete_omission', {}).get('count', 0)}, "
-                  f"severe={report.get('severe_deletion', {}).get('count', 0)}"
-              )
-              if flagged:
-                  failures.append(f"{mode or 'whole'}: {', '.join(flagged)}")
-          if failures:
-              raise SystemExit("Omission quality gate failed:\\n" + "\\n".join(failures))
-          print("No complete, near-complete, or severe deletions detected in any inference mode.")
-          PY
-      - name: Validate paired outputs and chunk coverage diagnostics
-        run: |
-          python - <<'PY'
-          import csv, json
-          from pathlib import Path
-          root = Path("tests/data/jsut_ja")
-          manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
-          expected = [item["case_id"] for item in manifest["manifest"]]
-          names = ["transcripts.tsv", "transcripts_chunked_15s.tsv",
-                   "transcripts_silence_aware_15s.tsv", "transcripts_overlap_2s.tsv"]
-          for name in names:
-              with (root / name).open(encoding="utf-8", newline="") as stream:
-                  rows = list(csv.DictReader(stream, delimiter="\t"))
-              if [row["case_id"] for row in rows] != expected:
-                  raise SystemExit(f"Case IDs/order mismatch in {name}")
-              if any(not row["hypothesis"].strip() for row in rows):
-                  raise SystemExit(f"Empty hypothesis found in {name}")
-          overlap = list(csv.DictReader((root / names[-1]).open(encoding="utf-8", newline=""), delimiter="\t"))
-          for row in overlap:
-              count = int(row["inference_chunks"])
-              starts = [float(x) for x in row["chunk_start_offsets_seconds"].split(",") if x]
-              if len(starts) != count or not starts or starts[0] != 0.0:
-                  raise SystemExit(f"Invalid overlap offsets: {row['case_id']}")
-              if any(b <= a for a, b in zip(starts, starts[1:])):
-                  raise SystemExit(f"Non-increasing offsets: {row['case_id']}")
-              if row.get("overlap_merge_method") not in {"timestamp", "text_fallback"}:
-                  raise SystemExit(f"Missing overlap merge method diagnostic: {row['case_id']}")
-          methods = {}
-          for row in overlap:
-              method = row["overlap_merge_method"]
-              methods[method] = methods.get(method, 0) + 1
-          print(f"Overlap merge methods: {methods}")
-          print(f"Validated {len(expected)} paired JSUT utterances across four inference modes.")
-          PY
-      - name: Upload metrics and transcripts only (not licensed audio)
+          python scripts/sanitize_asr_report.py --root tests/data/jsut_ja --comparison mode_comparison.json --diagnostics execution_diagnostics.json \
+            --report whole=metrics.json \
+            --report fixed_15s=metrics_chunked_15s.json \
+            --report silence_aware_15s=metrics_silence_aware_15s.json \
+            --report overlap_2s=metrics_overlap_2s.json \
+            --output tests/data/jsut_ja/public_metrics.json
+      - name: Remove local licensed audio and raw reports
         if: always()
+        run: |
+          rm -rf tests/data/jsut_ja/clips
+          rm -rf ~/.cache/huggingface/hub/datasets--FluidInference--JSUT-basic5000
+          rm -f tests/data/jsut_ja/manifest.json tests/data/jsut_ja/transcripts*.tsv
+          rm -f tests/data/jsut_ja/metrics*.stdout.json tests/data/jsut_ja/metrics*.json
+          rm -f tests/data/jsut_ja/mode_comparison.json tests/data/jsut_ja/execution_diagnostics.json
+          rm -rf downloads models/zipformer-ja
+      - name: Upload sanitized aggregate metrics only
+        if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: jsut-asr-validation-${{ github.run_id }}
-          path: |
-            tests/data/jsut_ja/manifest.json
-            tests/data/jsut_ja/transcripts*.tsv
-            tests/data/jsut_ja/metrics*.json
-            tests/data/jsut_ja/mode_comparison.json
+          name: jsut-asr-aggregate-${{ github.run_id }}
+          path: tests/data/jsut_ja/public_metrics.json
           if-no-files-found: warn
           retention-days: 30
   license-not-acknowledged:

@@ -16,10 +16,10 @@ def load_report(label: str, path: Path) -> dict:
     for item in cases:
         case_id = item.get("case_id")
         if not case_id or case_id in indexed:
-            raise ValueError(f"{label}: missing or duplicate case_id: {case_id!r}")
+            raise ValueError(f"{label}: missing or duplicate case identifier")
         char = item.get("char")
-        if not isinstance(char, dict) or "deletions" not in char:
-            raise ValueError(f"{label}: missing character deletion count for {case_id}")
+        if not isinstance(char, dict) or not {"deletions", "reference_units"}.issubset(char):
+            raise ValueError(f"{label}: missing character deletion/reference counts")
         indexed[case_id] = item
     return {"raw": report, "cases": indexed}
 
@@ -27,6 +27,9 @@ def load_report(label: str, path: Path) -> dict:
 def compare_reports(named_paths: list[tuple[str, Path]]) -> dict:
     if len(named_paths) < 2:
         raise ValueError("at least two named metrics reports are required")
+    names = [name for name, _ in named_paths]
+    if any(not name for name in names) or len(set(names)) != len(names):
+        raise ValueError("mode names must be non-empty and unique")
     loaded = [(name, load_report(name, path)) for name, path in named_paths]
     baseline_name, baseline = loaded[0]
     baseline_ids = set(baseline["cases"])
@@ -35,7 +38,16 @@ def compare_reports(named_paths: list[tuple[str, Path]]) -> dict:
         if set(data["cases"]) != baseline_ids:
             missing = sorted(baseline_ids - set(data["cases"]))
             extra = sorted(set(data["cases"]) - baseline_ids)
-            raise ValueError(f"{name}: case set mismatch; missing={missing[:5]}, extra={extra[:5]}")
+            raise ValueError(f"{name}: case set mismatch; missing_count={len(missing)}, extra_count={len(extra)}")
+        for case_id in baseline_ids:
+            base_case = baseline["cases"][case_id]
+            candidate_case = data["cases"][case_id]
+            if base_case.get("category") != candidate_case.get("category"):
+                raise ValueError(f"{name}: category mismatch in paired cases")
+            base_units = base_case["char"].get("reference_units")
+            candidate_units = candidate_case["char"].get("reference_units")
+            if base_units != candidate_units:
+                raise ValueError(f"{name}: reference length mismatch in paired cases")
         rows = list(data["cases"].values())
         summary = data["raw"].get("summary", {}).get("char", {})
         modes[name] = {
@@ -54,16 +66,13 @@ def compare_reports(named_paths: list[tuple[str, Path]]) -> dict:
     comparisons = {}
     for name, data in loaded[1:]:
         improved = regressed = unchanged = 0
-        improved_ids, regressed_ids = [], []
         for case_id, base_case in baseline_cases.items():
             base_del = int(base_case["char"]["deletions"])
             candidate_del = int(data["cases"][case_id]["char"]["deletions"])
             if candidate_del < base_del:
                 improved += 1
-                improved_ids.append(case_id)
             elif candidate_del > base_del:
                 regressed += 1
-                regressed_ids.append(case_id)
             else:
                 unchanged += 1
         comparisons[name] = {
@@ -77,8 +86,6 @@ def compare_reports(named_paths: list[tuple[str, Path]]) -> dict:
             "cases_with_fewer_deletions": improved,
             "cases_with_more_deletions": regressed,
             "cases_unchanged": unchanged,
-            "improved_case_ids": improved_ids,
-            "regressed_case_ids": regressed_ids,
         }
     return {
         "baseline_mode": baseline_name,
@@ -114,7 +121,12 @@ def main() -> int:
     args.output_json.parent.mkdir(parents=True, exist_ok=True)
     rendered = json.dumps(result, ensure_ascii=False, indent=2)
     args.output_json.write_text(rendered + "\n", encoding="utf-8")
-    print(rendered)
+    # Console output is public workflow log material: emit aggregate-only data.
+    print(json.dumps({
+        "modes": result["modes"],
+        "paired_comparisons": result["paired_comparisons"],
+        "baseline_mode": result["baseline_mode"],
+    }, ensure_ascii=False, indent=2))
     return 0
 
 

@@ -1,6 +1,7 @@
 """Silence-aware chunk boundary selection for long-form audio."""
 from __future__ import annotations
 
+import math
 import numpy as np
 
 
@@ -20,6 +21,8 @@ def split_at_low_energy(
     x = np.asarray(samples)
     if x.ndim != 1:
         raise ValueError("samples must be mono (1-D)")
+    if np.issubdtype(x.dtype, np.inexact) and not np.isfinite(x).all():
+        raise ValueError("samples must contain only finite values")
     if sample_rate <= 0 or target_seconds <= 0 or frame_seconds <= 0:
         raise ValueError("sample_rate, target_seconds, and frame_seconds must be positive")
     if search_window_seconds < 0 or min_chunk_seconds <= 0:
@@ -62,6 +65,8 @@ def split_with_overlap(samples: np.ndarray, sample_rate: int, chunk_seconds: flo
     x = np.asarray(samples)
     if x.ndim != 1:
         raise ValueError("samples must be mono (1-D)")
+    if np.issubdtype(x.dtype, np.inexact) and not np.isfinite(x).all():
+        raise ValueError("samples must contain only finite values")
     if sample_rate <= 0 or chunk_seconds <= 0:
         raise ValueError("sample_rate and chunk_seconds must be positive")
     if overlap_seconds < 0 or overlap_seconds >= chunk_seconds:
@@ -98,32 +103,44 @@ def merge_timestamped_chunks(
     if count == 0:
         return "", "empty"
     if not (len(chunk_start_seconds) == len(chunk_durations_seconds) == count):
-        return merge_overlapping_text([str(item.get("text", "")) for item in chunk_results]), "text_fallback"
+        return _concatenate_chunk_text([str(item.get("text", "")) for item in chunk_results]), "text_fallback"
+    # Invalid timing metadata must never silently discard tokens at a seam.
+    try:
+        starts = [float(value) for value in chunk_start_seconds]
+        durations = [float(value) for value in chunk_durations_seconds]
+    except (TypeError, ValueError):
+        return _concatenate_chunk_text([str(item.get("text", "")) for item in chunk_results]), "text_fallback"
+    if any(not math.isfinite(value) for value in starts + durations):
+        return _concatenate_chunk_text([str(item.get("text", "")) for item in chunk_results]), "text_fallback"
+    if any(value <= 0 for value in durations):
+        return _concatenate_chunk_text([str(item.get("text", "")) for item in chunk_results]), "text_fallback"
+    if starts[0] < 0 or any(right <= left for left, right in zip(starts, starts[1:])):
+        return _concatenate_chunk_text([str(item.get("text", "")) for item in chunk_results]), "text_fallback"
     normalized = []
     for index, item in enumerate(chunk_results):
         text = str(item.get("text", "")).strip()
         tokens = list(item.get("tokens") or [])
         timestamps = list(item.get("timestamps") or [])
         if not tokens or len(tokens) != len(timestamps):
-            return merge_overlapping_text([str(x.get("text", "")) for x in chunk_results]), "text_fallback"
+            return _concatenate_chunk_text([str(x.get("text", "")) for x in chunk_results]), "text_fallback"
         try:
             times = [float(value) for value in timestamps]
         except (TypeError, ValueError):
-            return merge_overlapping_text([str(x.get("text", "")) for x in chunk_results]), "text_fallback"
-        if any(value < 0 or value > chunk_durations_seconds[index] + 0.25 for value in times):
-            return merge_overlapping_text([str(x.get("text", "")) for x in chunk_results]), "text_fallback"
+            return _concatenate_chunk_text([str(x.get("text", "")) for x in chunk_results]), "text_fallback"
+        if any(not math.isfinite(value) or value < 0 or value > durations[index] + 0.25 for value in times):
+            return _concatenate_chunk_text([str(x.get("text", "")) for x in chunk_results]), "text_fallback"
         if any(right < left for left, right in zip(times, times[1:])):
-            return merge_overlapping_text([str(x.get("text", "")) for x in chunk_results]), "text_fallback"
+            return _concatenate_chunk_text([str(x.get("text", "")) for x in chunk_results]), "text_fallback"
         rendered = "".join(str(token).replace("▁", " ") for token in tokens)
         if rendered.strip() != text:
-            return merge_overlapping_text([str(x.get("text", "")) for x in chunk_results]), "text_fallback"
+            return _concatenate_chunk_text([str(x.get("text", "")) for x in chunk_results]), "text_fallback"
         normalized.append((tokens, times))
 
     lower_bounds = [float("-inf")] * count
     upper_bounds = [float("inf")] * count
     for index in range(count - 1):
-        previous_end = chunk_start_seconds[index] + chunk_durations_seconds[index]
-        next_start = chunk_start_seconds[index + 1]
+        previous_end = starts[index] + durations[index]
+        next_start = starts[index + 1]
         if next_start >= previous_end:
             continue
         seam = (next_start + previous_end) / 2.0
@@ -132,12 +149,17 @@ def merge_timestamped_chunks(
 
     merged_tokens = []
     for index, (tokens, times) in enumerate(normalized):
-        start = chunk_start_seconds[index]
+        start = starts[index]
         for token, timestamp in zip(tokens, times):
             absolute_time = start + timestamp
             if lower_bounds[index] <= absolute_time < upper_bounds[index]:
                 merged_tokens.append(str(token).replace("▁", " "))
     return "".join(merged_tokens).strip(), "timestamp"
+
+def _concatenate_chunk_text(texts: list[str]) -> str:
+    """Preserve all text when fallback overlap cannot be proven from timing."""
+    return "".join(str(text).strip() for text in texts if str(text).strip())
+
 
 def merge_overlapping_text(texts: list[str], min_overlap_chars: int = 4) -> str:
     """Remove only substantial exact suffix/prefix duplicates between adjacent chunks.
@@ -161,3 +183,18 @@ def merge_overlapping_text(texts: list[str], min_overlap_chars: int = 4) -> str:
                 break
         merged += part[overlap:]
     return merged
+
+
+def split_fixed_chunks(samples: np.ndarray, sample_rate: int, chunk_seconds: float):
+    """Split mono audio into contiguous chunks, retaining the final partial chunk."""
+    x = np.asarray(samples)
+    if x.ndim != 1:
+        raise ValueError("samples must be mono (1-D)")
+    if np.issubdtype(x.dtype, np.inexact) and not np.isfinite(x).all():
+        raise ValueError("samples must contain only finite values")
+    if sample_rate <= 0 or chunk_seconds <= 0:
+        raise ValueError("sample_rate and chunk_seconds must be positive")
+    if not x.size:
+        return []
+    size = max(1, int(round(chunk_seconds * sample_rate)))
+    return [x[start:min(start + size, len(x))] for start in range(0, len(x), size)]

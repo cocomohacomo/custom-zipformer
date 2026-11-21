@@ -8,6 +8,73 @@ import sys
 from pathlib import Path
 
 
+
+def prepare_inference_audio(samples, source_sample_rate: int, target_sample_rate: int = 16000):
+    """Convert finite mono/stereo audio to finite float32 at the model sample rate.
+
+    If averaging stereo channels would nearly cancel an anti-phase signal,
+    retain the higher-energy channel instead of feeding near-silence to ASR.
+    """
+    import numpy as np
+    from math import gcd
+
+    audio = np.asarray(samples)
+    if audio.ndim not in (1, 2):
+        raise ValueError("audio must be mono or (frames, channels)")
+    if audio.ndim == 2 and audio.shape[1] < 1:
+        raise ValueError("audio must contain at least one channel")
+    if audio.shape[0] == 0:
+        raise ValueError("audio must contain at least one frame")
+    if np.issubdtype(audio.dtype, np.inexact) and not np.isfinite(audio).all():
+        raise ValueError("audio must contain only finite samples")
+    if source_sample_rate <= 0 or target_sample_rate <= 0:
+        raise ValueError("sample rates must be positive")
+
+    audio = np.asarray(audio, dtype=np.float32)
+    if audio.ndim == 2:
+        channels = [audio[:, index] for index in range(audio.shape[1])]
+        mono = np.mean(audio, axis=1, dtype=np.float64).astype(np.float32)
+        channel_rms = [float(np.sqrt(np.mean(np.square(ch, dtype=np.float64)))) for ch in channels]
+        mean_rms = float(np.sqrt(np.mean(np.square(mono, dtype=np.float64))))
+        max_channel_rms = max(channel_rms, default=0.0)
+        if max_channel_rms > 0 and mean_rms < 0.25 * max_channel_rms:
+            mono = channels[int(np.argmax(channel_rms))].copy()
+    else:
+        mono = audio.copy()
+
+    if source_sample_rate != target_sample_rate:
+        from scipy.signal import resample_poly
+        divisor = gcd(int(source_sample_rate), int(target_sample_rate))
+        mono = resample_poly(
+            mono, target_sample_rate // divisor, source_sample_rate // divisor
+        ).astype(np.float32)
+    if mono.size == 0 or not np.isfinite(mono).all():
+        raise ValueError("prepared inference audio is empty or non-finite")
+    return np.asarray(mono, dtype=np.float32)
+
+
+
+def decode_audio_chunks(recognizer, chunks):
+    """Decode every non-empty offline chunk, including the final partial chunk."""
+    results = []
+    durations = []
+    for chunk in chunks:
+        if len(chunk) == 0:
+            continue
+        stream = recognizer.create_stream()
+        stream.accept_waveform(16000, chunk)
+        # OfflineRecognizer.decode_stream() completes the supplied waveform.
+        recognizer.decode_stream(stream)
+        result = stream.result
+        results.append({
+            "text": result.text.strip(),
+            "tokens": list(getattr(result, "tokens", []) or []),
+            "timestamps": list(getattr(result, "timestamps", []) or []),
+        })
+        durations.append(float(len(chunk) / 16000))
+    return results, durations
+
+
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("manifest", type=Path)
@@ -82,7 +149,7 @@ def main() -> int:
         "case_id", "category", "reference", "hypothesis",
         "audio_duration_seconds", "audio_rms", "audio_peak",
         "near_silence_fraction", "clipping_fraction",
-        "source_sample_rate", "source_channels", "applied_gain_db", "inference_audio_rms", "inference_chunks", "chunk_boundaries_seconds", "chunk_start_offsets_seconds", "overlap_merge_method",
+        "source_sample_rate", "source_channels", "applied_gain_db", "inference_audio_rms", "inference_chunks", "inference_empty_chunks", "inference_short_chunks_lt_25ms", "inference_silent_chunks", "chunk_boundaries_seconds", "chunk_start_offsets_seconds", "overlap_merge_method",
     ]
     args.output_tsv.parent.mkdir(parents=True, exist_ok=True)
     with args.output_tsv.open("w", encoding="utf-8", newline="") as f:
@@ -94,10 +161,11 @@ def main() -> int:
                 raise SystemExit(f"Audio missing: {audio_path}")
             samples, sr = sf.read(str(audio_path), dtype="float32", always_2d=True)
             channels = int(samples.shape[1])
-            mono = samples.mean(axis=1)
-            if mono.size == 0:
-                raise SystemExit(f"Audio is empty: {audio_path}")
-            duration = float(len(mono) / sr)
+            if sr <= 0:
+                raise SystemExit(f"Invalid sample rate: {audio_path}")
+            duration = float(len(samples) / sr)
+            # Downmix with anti-phase protection, then resample exactly once.
+            mono = prepare_inference_audio(samples, int(sr), 16000)
             rms = float(np.sqrt(np.mean(np.square(mono, dtype=np.float64))))
             peak = float(np.max(np.abs(mono)))
             near_silence = float(np.mean(np.abs(mono) < 1e-4))
@@ -110,10 +178,6 @@ def main() -> int:
                     gain = min(gain, 0.95 / peak) if peak > 0 else gain
                     mono = mono * np.float32(gain)
             inference_rms = float(np.sqrt(np.mean(np.square(mono, dtype=np.float64))))
-            if sr != 16000:
-                from math import gcd
-                g = gcd(int(sr), 16000)
-                mono = resample_poly(mono, 16000 // g, int(sr) // g).astype(np.float32)
             inference_samples = np.asarray(mono, dtype=np.float32)
             boundaries = []
             chunk_start_offsets = [0.0]
@@ -133,27 +197,10 @@ def main() -> int:
                 )
                 chunk_start_offsets = [0.0, *overlap_starts]
             else:
-                chunk_samples = max(1, int(round(args.chunk_seconds * 16000)))
-                chunks = [inference_samples[start:start + chunk_samples]
-                          for start in range(0, len(inference_samples), chunk_samples)]
-            chunk_texts = []
-            chunk_results = []
-            chunk_durations = []
-            for chunk in chunks:
-                if chunk.size == 0:
-                    continue
-                stream = recognizer.create_stream()
-                stream.accept_waveform(16000, chunk)
-                recognizer.decode_stream(stream)
-                result = stream.result
-                text = result.text.strip()
-                chunk_texts.append(text)
-                chunk_results.append({
-                    "text": text,
-                    "tokens": list(getattr(result, "tokens", []) or []),
-                    "timestamps": list(getattr(result, "timestamps", []) or []),
-                })
-                chunk_durations.append(float(len(chunk) / 16000))
+                from audio_chunking import split_fixed_chunks
+                chunks = split_fixed_chunks(inference_samples, 16000, args.chunk_seconds)
+            chunk_results, chunk_durations = decode_audio_chunks(recognizer, chunks)
+            chunk_texts = [item["text"] for item in chunk_results]
             overlap_merge_method = "not_applicable"
             if args.chunk_overlap_seconds > 0:
                 from audio_chunking import merge_timestamped_chunks
@@ -174,7 +221,12 @@ def main() -> int:
                 "source_sample_rate": int(sr), "source_channels": channels,
                 "applied_gain_db": f"{20.0 * np.log10(gain):.4f}",
                 "inference_audio_rms": f"{inference_rms:.8f}",
-                "inference_chunks": len(chunks),
+                "inference_chunks": len(chunk_durations),
+                "inference_empty_chunks": sum(not value for value in chunk_texts),
+                "inference_short_chunks_lt_25ms": sum(1 for value in chunk_durations if value < 0.025),
+                "inference_silent_chunks": sum(
+                    1 for chunk in chunks if chunk.size and float(np.max(np.abs(chunk))) < 1e-8
+                ),
                 "chunk_boundaries_seconds": ",".join(f"{v:.3f}" for v in boundaries),
                 "chunk_start_offsets_seconds": ",".join(f"{v:.3f}" for v in chunk_start_offsets),
                 "overlap_merge_method": overlap_merge_method,

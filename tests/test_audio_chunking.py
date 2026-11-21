@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 import numpy as np
 
-from scripts.audio_chunking import merge_overlapping_text, merge_timestamped_chunks, split_at_low_energy, split_with_overlap
+from scripts.audio_chunking import merge_overlapping_text, merge_timestamped_chunks, split_at_low_energy, split_fixed_chunks, split_with_overlap
 
 
 class SilenceAwareChunkingTests(unittest.TestCase):
@@ -31,10 +31,30 @@ class SilenceAwareChunkingTests(unittest.TestCase):
         self.assertEqual(chunks, [])
         self.assertEqual(boundaries, [])
 
+    def test_rejects_non_finite_waveform_samples(self):
+        for bad_value in (float("nan"), float("inf"), float("-inf")):
+            with self.subTest(value=bad_value):
+                x = np.array([0.0, bad_value, 0.0], dtype=np.float32)
+                with self.assertRaisesRegex(ValueError, "finite"):
+                    split_at_low_energy(x, 16000, 1)
+
     def test_rejects_stereo_input(self):
         with self.assertRaises(ValueError):
             split_at_low_energy(np.zeros((100, 2)), 16000, 15)
 
+
+    def test_fixed_chunks_retain_final_partial_chunk_and_exact_sample_coverage(self):
+        for sample_count in (1, 15999, 16000, 16001, 48001):
+            x = np.arange(sample_count, dtype=np.float32)
+            chunks = split_fixed_chunks(x, 16000, 1.0)
+            self.assertTrue(chunks)
+            self.assertTrue(all(len(chunk) > 0 for chunk in chunks))
+            np.testing.assert_array_equal(np.concatenate(chunks), x)
+            self.assertEqual(len(chunks[-1]), sample_count - (len(chunks) - 1) * 16000)
+
+    def test_fixed_chunk_split_rejects_non_finite_audio(self):
+        with self.assertRaisesRegex(ValueError, "finite"):
+            split_fixed_chunks(np.array([0.0, np.nan]), 16000, 1.0)
 
 class OverlapChunkingTests(unittest.TestCase):
     def test_chunks_share_waveform_context(self):
@@ -43,6 +63,11 @@ class OverlapChunkingTests(unittest.TestCase):
         self.assertEqual(starts, [3.0, 6.0])
         self.assertEqual(len(chunks), 3)
         np.testing.assert_array_equal(chunks[0][-1000:], chunks[1][:1000])
+
+    def test_overlap_split_rejects_non_finite_waveform_samples(self):
+        x = np.array([0.0, np.nan, 0.0], dtype=np.float32)
+        with self.assertRaisesRegex(ValueError, "finite"):
+            split_with_overlap(x, 16000, 1, 0.1)
 
     def test_invalid_overlap_is_rejected(self):
         with self.assertRaises(ValueError):
@@ -100,7 +125,43 @@ class OverlapChunkingTests(unittest.TestCase):
             {"text": "とても良い天気ですね", "tokens": ["天気", "ですね"], "timestamps": [0, 1]},
         ]
         merged, method = merge_timestamped_chunks(results, [0.0, 4.0], [6.0, 6.0])
-        self.assertEqual(merged, "今日はとても良い天気ですね")
+        self.assertEqual(merged, "今日はとても良い天気とても良い天気ですね")
+        self.assertEqual(method, "text_fallback")
+
+
+    def test_timestamp_fallback_preserves_a_genuinely_repeated_phrase(self):
+        phrase = "同じ内容をもう一度話す"
+        results = [
+            {"text": phrase, "tokens": ["不一致"], "timestamps": [0]},
+            {"text": phrase, "tokens": ["不一致"], "timestamps": [0]},
+        ]
+        merged, method = merge_timestamped_chunks(results, [0.0, 2.0], [3.0, 3.0])
+        self.assertEqual(merged, phrase + phrase)
+        self.assertEqual(method, "text_fallback")
+
+    def test_timestamp_merge_falls_back_on_non_finite_timestamp(self):
+        results = [
+            {"text": "abc", "tokens": list("abc"), "timestamps": [0, float("nan"), 2]},
+        ]
+        merged, method = merge_timestamped_chunks(results, [0.0], [3.0])
+        self.assertEqual(merged, "abc")
+        self.assertEqual(method, "text_fallback")
+
+    def test_timestamp_merge_falls_back_on_non_monotonic_chunk_starts(self):
+        results = [
+            {"text": "abc", "tokens": list("abc"), "timestamps": [0, 1, 2]},
+            {"text": "def", "tokens": list("def"), "timestamps": [0, 1, 2]},
+        ]
+        merged, method = merge_timestamped_chunks(results, [2.0, 1.0], [3.0, 3.0])
+        self.assertEqual(merged, "abcdef")
+        self.assertEqual(method, "text_fallback")
+
+    def test_timestamp_merge_falls_back_on_non_positive_duration(self):
+        results = [
+            {"text": "abc", "tokens": list("abc"), "timestamps": [0, 1, 2]},
+        ]
+        merged, method = merge_timestamped_chunks(results, [0.0], [0.0])
+        self.assertEqual(merged, "abc")
         self.assertEqual(method, "text_fallback")
 
     def test_timestamp_merge_falls_back_on_non_monotonic_times(self):

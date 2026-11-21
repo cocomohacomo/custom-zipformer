@@ -1,0 +1,121 @@
+name: validate-japanese-asr-with-fleurs
+
+on:
+  workflow_dispatch:
+    inputs:
+      sample_limit:
+        description: Number of FLEURS Japanese utterances (maximum 500)
+        required: true
+        default: "100"
+        type: string
+      acknowledge_license:
+        description: Confirm FLEURS CC-BY-4.0 attribution and local-only audio handling
+        required: true
+        default: "no"
+        type: choice
+        options:
+          - "no"
+          - "yes"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: japanese-asr-fleurs-validation
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    if: ${{ inputs.acknowledge_license == 'yes' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install FLEURS downloader and inference dependencies
+        run: python -m pip install --upgrade pip huggingface_hub sherpa-onnx soundfile scipy numpy
+      - name: Download deterministic FLEURS Japanese subset
+        run: |
+          python scripts/download_fleurs_subset.py --limit "${{ inputs.sample_limit }}" --output tests/data/fleurs_ja
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root = Path("tests/data/fleurs_ja")
+          data = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
+          if data["copied"] < 1 or data["copied"] > int("${{ inputs.sample_limit }}"):
+              raise SystemExit("FLEURS subset size is invalid")
+          for item in data["manifest"]:
+              audio = root / item["audio"]
+              if not audio.is_file() or audio.stat().st_size == 0:
+                  raise SystemExit("Missing or empty FLEURS audio file")
+          print(f"Verified {data['copied']} FLEURS audio/transcript pairs.")
+          PY
+      - name: Download public Japanese Zipformer model
+        run: |
+          mkdir -p downloads models/zipformer-ja
+          curl --fail --location --retry 3 "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-zipformer-ja-reazonspeech-2024-08-01.tar.bz2" -o downloads/zipformer-ja.tar.bz2
+          tar -xjf downloads/zipformer-ja.tar.bz2 -C models/zipformer-ja
+          for pattern in 'encoder*.onnx' 'decoder*.onnx' 'joiner*.onnx' 'tokens.txt'; do
+            find models/zipformer-ja -type f -name "$pattern" -print -quit | grep -q . || { echo "::error::Missing model file matching $pattern"; exit 1; }
+          done
+      - name: Run whole-utterance inference
+        run: |
+          python scripts/run_sherpa_zipformer.py tests/data/fleurs_ja/manifest.json --model-dir models/zipformer-ja --threads 2 --output-tsv tests/data/fleurs_ja/transcripts.tsv
+      - name: Run fixed 15-second chunk comparison
+        run: |
+          python scripts/run_sherpa_zipformer.py tests/data/fleurs_ja/manifest.json --model-dir models/zipformer-ja --threads 2 --chunk-seconds 15 --output-tsv tests/data/fleurs_ja/transcripts_chunked_15s.tsv
+      - name: Run silence-aware chunk comparison
+        run: |
+          python scripts/run_sherpa_zipformer.py tests/data/fleurs_ja/manifest.json --model-dir models/zipformer-ja --threads 2 --silence-aware-chunk-seconds 15 --chunk-search-window-seconds 2 --output-tsv tests/data/fleurs_ja/transcripts_silence_aware_15s.tsv
+      - name: Run 2-second overlap comparison
+        run: |
+          python scripts/run_sherpa_zipformer.py tests/data/fleurs_ja/manifest.json --model-dir models/zipformer-ja --threads 2 --chunk-seconds 15 --chunk-overlap-seconds 2 --output-tsv tests/data/fleurs_ja/transcripts_overlap_2s.tsv
+      - name: Calculate metrics
+        run: |
+          for mode in "" "_chunked_15s" "_silence_aware_15s" "_overlap_2s"; do
+            python scripts/deletion_metrics.py "tests/data/fleurs_ja/transcripts${mode}.tsv" --output-json "tests/data/fleurs_ja/metrics${mode}.json" > "tests/data/fleurs_ja/metrics${mode}.stdout.json"
+          done
+      - name: Compare paired inference modes
+        run: |
+          python scripts/compare_asr_modes.py \
+            --report whole=tests/data/fleurs_ja/metrics.json \
+            --report fixed_15s=tests/data/fleurs_ja/metrics_chunked_15s.json \
+            --report silence_aware=tests/data/fleurs_ja/metrics_silence_aware_15s.json \
+            --report overlap_2s=tests/data/fleurs_ja/metrics_overlap_2s.json \
+            --output-json tests/data/fleurs_ja/mode_comparison.json
+      - name: Validate paired inference outputs and report omissions
+        run: python scripts/validate_asr_evaluation.py --root tests/data/fleurs_ja --output-json tests/data/fleurs_ja/execution_diagnostics.json
+      - name: Sanitize output to aggregate-only metrics
+        if: success()
+        run: |
+          python scripts/sanitize_asr_report.py --root tests/data/fleurs_ja --comparison mode_comparison.json --diagnostics execution_diagnostics.json \
+            --report whole=metrics.json \
+            --report fixed_15s=metrics_chunked_15s.json \
+            --report silence_aware_15s=metrics_silence_aware_15s.json \
+            --report overlap_2s=metrics_overlap_2s.json \
+            --output tests/data/fleurs_ja/public_metrics.json
+      - name: Remove local licensed audio and raw reports
+        if: always()
+        run: |
+          rm -rf tests/data/fleurs_ja/clips
+          rm -rf ~/.cache/huggingface/hub/datasets--google--fleurs
+          rm -f tests/data/fleurs_ja/manifest.json tests/data/fleurs_ja/transcripts*.tsv
+          rm -f tests/data/fleurs_ja/metrics*.stdout.json tests/data/fleurs_ja/metrics*.json
+          rm -f tests/data/fleurs_ja/mode_comparison.json tests/data/fleurs_ja/execution_diagnostics.json
+      - name: Upload sanitized aggregate metrics only
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fleurs-asr-aggregate-${{ github.run_id }}
+          path: tests/data/fleurs_ja/public_metrics.json
+          if-no-files-found: warn
+          retention-days: 30
+  license-not-acknowledged:
+    if: ${{ inputs.acknowledge_license != 'yes' }}
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "::error::FLEURS evaluation requires explicit acknowledgement of its CC-BY-4.0 attribution terms."
+          exit 2
