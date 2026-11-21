@@ -18,8 +18,8 @@ def load_report(label: str, path: Path) -> dict:
         if not case_id or case_id in indexed:
             raise ValueError(f"{label}: missing or duplicate case_id: {case_id!r}")
         char = item.get("char")
-        if not isinstance(char, dict) or "deletions" not in char:
-            raise ValueError(f"{label}: missing character deletion count for {case_id}")
+        if not isinstance(char, dict) or not {"deletions", "reference_units"}.issubset(char):
+            raise ValueError(f"{label}: missing character deletion/reference counts for {case_id}")
         indexed[case_id] = item
     return {"raw": report, "cases": indexed}
 
@@ -27,6 +27,9 @@ def load_report(label: str, path: Path) -> dict:
 def compare_reports(named_paths: list[tuple[str, Path]]) -> dict:
     if len(named_paths) < 2:
         raise ValueError("at least two named metrics reports are required")
+    names = [name for name, _ in named_paths]
+    if any(not name for name in names) or len(set(names)) != len(names):
+        raise ValueError("mode names must be non-empty and unique")
     loaded = [(name, load_report(name, path)) for name, path in named_paths]
     baseline_name, baseline = loaded[0]
     baseline_ids = set(baseline["cases"])
@@ -36,6 +39,15 @@ def compare_reports(named_paths: list[tuple[str, Path]]) -> dict:
             missing = sorted(baseline_ids - set(data["cases"]))
             extra = sorted(set(data["cases"]) - baseline_ids)
             raise ValueError(f"{name}: case set mismatch; missing={missing[:5]}, extra={extra[:5]}")
+        for case_id in baseline_ids:
+            base_case = baseline["cases"][case_id]
+            candidate_case = data["cases"][case_id]
+            if base_case.get("category") != candidate_case.get("category"):
+                raise ValueError(f"{name}: category mismatch for {case_id}")
+            base_units = base_case["char"].get("reference_units")
+            candidate_units = candidate_case["char"].get("reference_units")
+            if base_units != candidate_units:
+                raise ValueError(f"{name}: reference length mismatch for {case_id}")
         rows = list(data["cases"].values())
         summary = data["raw"].get("summary", {}).get("char", {})
         modes[name] = {
