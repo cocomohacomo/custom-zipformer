@@ -134,11 +134,19 @@ def validate_evaluation(root: Path) -> dict:
 
     results = {}
     reference_durations = None
+    reference_texts = None
     for mode, (transcript_name, metrics_name) in MODES.items():
         rows = _read_tsv(root / transcript_name)
         actual = [row.get("case_id") for row in rows]
         if actual != expected:
             raise ValueError(f"{mode}: inference row count/order does not match the manifest")
+        references = [row.get("reference", "") for row in rows]
+        if any(not isinstance(value, str) for value in references):
+            raise ValueError(f"{mode}: reference transcript is missing or invalid")
+        if reference_texts is None:
+            reference_texts = references
+        elif references != reference_texts:
+            raise ValueError(f"{mode}: reference transcripts differ from the baseline")
         durations = [_finite_float(row.get("audio_duration_seconds"), "audio duration") for row in rows]
         if reference_durations is None:
             reference_durations = durations
