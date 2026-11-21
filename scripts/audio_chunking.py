@@ -55,3 +55,39 @@ def split_at_low_energy(
     edges = [0, *boundaries, n]
     chunks = [x[a:b] for a, b in zip(edges, edges[1:])]
     return chunks, [b / sample_rate for b in boundaries]
+
+
+def split_with_overlap(samples: np.ndarray, sample_rate: int, chunk_seconds: float, overlap_seconds: float):
+    """Return fixed chunks with shared waveform context and their start times."""
+    x = np.asarray(samples)
+    if x.ndim != 1:
+        raise ValueError("samples must be mono (1-D)")
+    if sample_rate <= 0 or chunk_seconds <= 0:
+        raise ValueError("sample_rate and chunk_seconds must be positive")
+    if overlap_seconds < 0 or overlap_seconds >= chunk_seconds:
+        raise ValueError("overlap_seconds must be >= 0 and smaller than chunk_seconds")
+    if not x.size:
+        return [], []
+    size = max(1, int(round(chunk_seconds * sample_rate)))
+    stride = size - int(round(overlap_seconds * sample_rate))
+    starts = list(range(0, len(x), stride))
+    chunks = [x[start:min(start + size, len(x))] for start in starts]
+    return chunks, [start / sample_rate for start in starts]
+
+
+def merge_overlapping_text(texts: list[str], min_overlap_chars: int = 2) -> str:
+    """Remove the longest exact suffix/prefix text duplicate between adjacent chunks."""
+    if min_overlap_chars < 1:
+        raise ValueError("min_overlap_chars must be positive")
+    merged = ""
+    for raw in texts:
+        part = raw.strip()
+        if not part:
+            continue
+        overlap = 0
+        for size in range(min(len(merged), len(part)), min_overlap_chars - 1, -1):
+            if merged.endswith(part[:size]):
+                overlap = size
+                break
+        merged += part[overlap:]
+    return merged
