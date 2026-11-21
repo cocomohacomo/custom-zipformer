@@ -64,24 +64,19 @@ class ValidateAsrEvaluationTests(unittest.TestCase):
             self.assertEqual(result["modes"]["silence_aware_15s"]["chunking"]["total_chunks"], 4)
 
 
-    def test_short_audio_chunking_diagnostics_show_no_activation(self):
+    def test_short_audio_chunking_diagnostics_detects_missing_split(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             self._write_fixture(root)
             path = root / MODES["fixed_15s"][0]
-            content = path.read_text(encoding="utf-8").replace("\\t2\\t", "\\t1\\t", 2)
-            path.write_text(content, encoding="utf-8")
-            with self.assertRaisesRegex(ValueError, "fixed chunk count"):
-                validate_evaluation(root)
-
-
-    def test_short_audio_chunking_diagnostics_show_no_activation(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            self._write_fixture(root)
-            path = root / MODES["fixed_15s"][0]
-            content = path.read_text(encoding="utf-8").replace("\\t30.0\\t", "\\t8.0\\t").replace("\\t2\\t", "\\t1\\t")
-            path.write_text(content, encoding="utf-8")
+            with path.open(encoding="utf-8", newline="") as stream:
+                rows = list(csv.DictReader(stream, delimiter="\\t"))
+            for row in rows:
+                row["inference_chunks"] = "1"
+            with path.open("w", encoding="utf-8", newline="") as stream:
+                writer = csv.DictWriter(stream, fieldnames=list(rows[0]), delimiter="\\t")
+                writer.writeheader()
+                writer.writerows(rows)
             with self.assertRaisesRegex(ValueError, "fixed chunk count"):
                 validate_evaluation(root)
 
@@ -171,7 +166,7 @@ class ValidateAsrEvaluationTests(unittest.TestCase):
             path = root / MODES["overlap_2s"][0]
             content = path.read_text(encoding="utf-8").replace("\t2\t", "\t2.5\t")
             path.write_text(content, encoding="utf-8")
-            with self.assertRaisesRegex(ValueError, "chunk diagnostics"):
+            with self.assertRaisesRegex(ValueError, "inference chunk count"):
                 validate_evaluation(root)
 
 
