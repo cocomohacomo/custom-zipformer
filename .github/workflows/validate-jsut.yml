@@ -49,7 +49,7 @@ jobs:
           for item in data["manifest"]:
               audio = root / item["audio"]
               if not audio.is_file() or audio.stat().st_size == 0:
-                  raise SystemExit(f"Missing/empty audio: {item['case_id']}")
+                  raise SystemExit("Missing or empty JSUT audio file")
           print(f"Verified {data['copied']} JSUT audio/transcript pairs.")
           PY
       - name: Download public Japanese Zipformer model
@@ -107,7 +107,7 @@ jobs:
                   f"severe={report.get('severe_deletion', {}).get('count', 0)}"
               )
               if flagged:
-                  failures.append(f"{mode or 'whole'}: {', '.join(flagged)}")
+                  failures.append(f"{mode or 'whole'}: {len(flagged)} flagged cases")
           if failures:
               raise SystemExit("Omission quality gate failed:\\n" + "\\n".join(failures))
           print("No complete, near-complete, or severe deletions detected in any inference mode.")
@@ -134,11 +134,11 @@ jobs:
               count = int(row["inference_chunks"])
               starts = [float(x) for x in row["chunk_start_offsets_seconds"].split(",") if x]
               if len(starts) != count or not starts or starts[0] != 0.0:
-                  raise SystemExit(f"Invalid overlap offsets: {row['case_id']}")
+                  raise SystemExit("Invalid overlap chunk offsets")
               if any(b <= a for a, b in zip(starts, starts[1:])):
-                  raise SystemExit(f"Non-increasing offsets: {row['case_id']}")
+                  raise SystemExit("Non-increasing overlap chunk offsets")
               if row.get("overlap_merge_method") not in {"timestamp", "text_fallback"}:
-                  raise SystemExit(f"Missing overlap merge method diagnostic: {row['case_id']}")
+                  raise SystemExit("Missing overlap merge method diagnostic")
           methods = {}
           for row in overlap:
               method = row["overlap_merge_method"]
