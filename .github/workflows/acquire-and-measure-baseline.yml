@@ -17,6 +17,7 @@ on:
       - "scripts/prepare_common_voice_baseline.py"
       - "scripts/deletion_metrics.py"
       - "scripts/compare_asr_modes.py"
+      - "scripts/sanitize_asr_report.py"
 
 permissions:
   contents: read
