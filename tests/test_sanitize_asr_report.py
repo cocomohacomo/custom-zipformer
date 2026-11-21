@@ -94,6 +94,25 @@ class SanitizeAsrReportTests(unittest.TestCase):
         self.assertIsNone(safe["overlap_2s"]["cer_delta"])
         self.assertIsNone(safe["overlap_2s"]["cases_unchanged"])
 
+    def test_dataset_workflow_logs_do_not_emit_utterance_identifiers(self):
+        root = Path(__file__).resolve().parents[1]
+        for dataset in ("jsut", "fleurs"):
+            with self.subTest(dataset=dataset):
+                workflow = (root / ".github" / "workflows" / f"validate-{dataset}.yml").read_text(encoding="utf-8")
+                self.assertNotIn("item['case_id']", workflow)
+                self.assertNotIn("row['case_id']", workflow)
+                self.assertNotIn("join(flagged)", workflow)
+                self.assertIn("Invalid overlap chunk offsets", workflow)
+
+    def test_dataset_downloaders_suppress_exception_details(self):
+        root = Path(__file__).resolve().parents[1]
+        for dataset in ("jsut", "fleurs"):
+            with self.subTest(dataset=dataset):
+                source = (root / "scripts" / f"download_{dataset}_subset.py").read_text(encoding="utf-8")
+                self.assertIn("detailed source information is suppressed", source)
+                self.assertIn("except Exception:", source)
+
+
     def test_dataset_workflows_upload_only_sanitized_aggregate_reports(self):
         root = Path(__file__).resolve().parents[1]
         for dataset in ("jsut", "fleurs"):
