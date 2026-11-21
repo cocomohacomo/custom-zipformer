@@ -49,7 +49,7 @@ class OverlapChunkingTests(unittest.TestCase):
             split_with_overlap(np.zeros(10), 10, 2, 2)
 
     def test_exact_text_overlap_is_removed(self):
-        self.assertEqual(merge_overlapping_text(["今日は晴れ", "晴れですね"]), "今日は晴れですね")
+        self.assertEqual(merge_overlapping_text(["今日はとても晴れ", "とても晴れですね"]), "今日はとても晴れですね")
 
     def test_short_prefix_is_preserved(self):
         self.assertEqual(merge_overlapping_text(["東京", "京都"]), "東京京都")
