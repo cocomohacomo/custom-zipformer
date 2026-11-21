@@ -7,6 +7,8 @@ this script never commits or uploads audio.
 from __future__ import annotations
 
 import argparse
+import contextlib
+import io
 import csv
 import hashlib
 import json
@@ -162,7 +164,8 @@ def main() -> int:
     if args.limit < 1 or args.limit > 500:
         parser.error("--limit must be between 1 and 500")
     try:
-        metadata = prepare_dataset(args.limit, args.output, args.seed)
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            metadata = prepare_dataset(args.limit, args.output, args.seed)
     except Exception:
         print("FLEURS dataset preparation failed; detailed source information is suppressed.")
         return 1
