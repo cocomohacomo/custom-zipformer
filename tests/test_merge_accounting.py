@@ -109,6 +109,29 @@ class MergeAccountingTests(unittest.TestCase):
         self.assertEqual(statuses["unmatched_no_candidate"], 1)
         self.assertNotIn("matched_unique", statuses)
 
+
+    def test_correspondence_marks_multiple_candidates_as_ambiguous(self):
+        chunks = [
+            {"text": "aX", "tokens": ["a", "X"], "timestamps": [0.5, 1.70]},
+            {"text": "XXb", "tokens": ["X", "X", "b"], "timestamps": [0.65, 0.75, 1.50]},
+        ]
+        _, method, diag = diagnose_timestamped_chunk_merge(chunks, [0.0, 1.0], [2.0, 2.0])
+        self.assertEqual(method, "timestamp")
+        counts = {x["status"]: x["rejected_tokens"] for x in diag["boundary_rejection_correspondence"]}
+        self.assertEqual(counts["matched_ambiguous"], 1)
+
+    def test_correspondence_augmenting_path_maximizes_one_to_one_matches(self):
+        chunks = [
+            {"text": "XX", "tokens": ["X", "X"], "timestamps": [1.60, 1.70]},
+            {"text": "XXXb", "tokens": ["X", "X", "X", "b"], "timestamps": [0.62, 0.94, 1.50, 1.80]},
+        ]
+        _, method, diag = diagnose_timestamped_chunk_merge(chunks, [0.0, 1.0], [2.0, 2.0])
+        self.assertEqual(method, "timestamp")
+        counts = {x["status"]: x["rejected_tokens"] for x in diag["boundary_rejection_correspondence"]}
+        self.assertEqual(counts["matched_unique"], 1)
+        self.assertEqual(counts["matched_ambiguous"], 1)
+        self.assertNotIn("unmatched_conflict", counts)
+
     def test_correspondence_aggregation_reconciles_and_rejects_mismatch(self):
         row = self.row()
         result = _merge_accounting_diagnostics([row])["merge_accounting"]
@@ -132,7 +155,7 @@ class MergeAccountingTests(unittest.TestCase):
                 "accounting_consistent": True,
                 "boundary_rejections_by_chunk": {"chunk_0": {"rejected_tokens": 2, "rejected_token_chars": 2}},
                 "boundary_rejections_by_side_and_distance": {
-                    "after_seam_from_left_chunk|lt_100ms": {"rejected_tokens": 1, "rejected_token_chars": 1}},
+                    "after_seam_from_left_chunk|lt_100ms": {"rejected_tokens": 1, "rejected_token_chars": 1, "token_text": "PRIVATE_TOKEN_SENTINEL", "case_id": "PRIVATE_CASE_SENTINEL"}},
                 "boundary_rejection_correspondence": {
                     "after_seam_from_left_chunk|lt_100ms|matched_unique": {"rejected_tokens": 1, "rejected_token_chars": 1}},
                 "private_case_id": "MUST_NOT_LEAK"}}}}
@@ -140,6 +163,8 @@ class MergeAccountingTests(unittest.TestCase):
         rendered = str(clean)
         self.assertIn("merge_accounting", rendered)
         self.assertNotIn("MUST_NOT_LEAK", rendered)
+        self.assertNotIn("PRIVATE_TOKEN_SENTINEL", rendered)
+        self.assertNotIn("PRIVATE_CASE_SENTINEL", rendered)
         self.assertIn("boundary_rejections_by_side_and_distance", rendered)
         self.assertIn("after_seam_from_left_chunk|lt_100ms", rendered)
         self.assertIn("boundary_rejection_correspondence", rendered)
