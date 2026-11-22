@@ -226,7 +226,8 @@ def diagnose_timestamped_chunk_merge(chunk_results, chunk_start_seconds, chunk_d
         durations = [float(v) for v in chunk_durations_seconds]
         lower = [float("-inf")] * n
         upper = [float("inf")] * n
-        seams = [None] * n
+        lower_seams = [None] * n
+        upper_seams = [None] * n
         for i in range(n - 1):
             previous_end = starts[i] + durations[i]
             next_start = starts[i + 1]
@@ -234,8 +235,8 @@ def diagnose_timestamped_chunk_merge(chunk_results, chunk_start_seconds, chunk_d
                 seam = (next_start + previous_end) / 2.0
                 upper[i] = seam
                 lower[i + 1] = seam
-                seams[i] = seam
-                seams[i + 1] = seam
+                upper_seams[i] = seam
+                lower_seams[i + 1] = seam
         detail_counts = {}
         for i, item in enumerate(chunk_results):
             local_rejected = local_rejected_chars = 0
@@ -250,11 +251,14 @@ def diagnose_timestamped_chunk_merge(chunk_results, chunk_start_seconds, chunk_d
                     rejected_chars += len(rendered)
                     local_rejected += 1
                     local_rejected_chars += len(rendered)
-                    seam = seams[i]
-                    if seam is not None:
-                        side = ("after_seam_from_left_chunk" if absolute_time >= upper[i]
-                                else "before_seam_from_right_chunk")
-                        distance = abs(absolute_time - seam)
+                    if absolute_time >= upper[i] and upper_seams[i] is not None:
+                        side = "after_seam_from_left_chunk"
+                        distance = abs(absolute_time - upper_seams[i])
+                    elif absolute_time < lower[i] and lower_seams[i] is not None:
+                        side = "before_seam_from_right_chunk"
+                        distance = abs(absolute_time - lower_seams[i])
+                    else:
+                        continue
                         bucket_index = next((j for j, edge in enumerate(distance_edges) if distance < edge), len(distance_edges))
                         key = (side, distance_labels[bucket_index])
                         counts = detail_counts.setdefault(key, [0, 0])

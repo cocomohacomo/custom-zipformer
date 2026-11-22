@@ -224,6 +224,7 @@ def _merge_accounting_diagnostics(rows: list[dict[str, str]]) -> dict:
             raise ValueError("merge boundary rejection detail is invalid") from exc
         if not isinstance(details, list):
             raise ValueError("merge boundary rejection detail must be a list")
+        detail_row_tokens = detail_row_chars = 0
         for detail in details:
             if not isinstance(detail, dict):
                 raise ValueError("merge boundary rejection detail record is invalid")
@@ -239,6 +240,13 @@ def _merge_accounting_diagnostics(rows: list[dict[str, str]]) -> dict:
             bucket = boundary_detail.setdefault(key, {"rejected_tokens": 0, "rejected_token_chars": 0})
             bucket["rejected_tokens"] += count
             bucket["rejected_token_chars"] += chars
+            detail_row_tokens += count
+            detail_row_chars += chars
+        if method == "timestamp" and (
+            detail_row_tokens != values["reject_tokens"]
+            or detail_row_chars != values["reject_token_chars"]
+        ):
+            raise ValueError("boundary rejection detail does not reconcile with rejected tokens")
     if totals["input_tokens"] != totals["keep_tokens"] + totals["reject_tokens"] + totals["fallback_tokens"]:
         raise ValueError("aggregate merge token accounting is inconsistent")
     return {"merge_accounting": {**totals, "timestamp_cases": methods["timestamp"], "fallback_cases": methods["text_fallback"], "unaccounted_tokens": 0, "accounting_consistent": True, "boundary_rejections_by_chunk": boundaries, "boundary_rejections_by_side_and_distance": boundary_detail}}

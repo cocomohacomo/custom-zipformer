@@ -5,6 +5,7 @@ import unittest
 from scripts.run_sherpa_zipformer import _merge_diagnostic_tsv_fields
 from scripts.validate_asr_evaluation import _merge_accounting_diagnostics
 from scripts.sanitize_asr_report import sanitize_execution_diagnostics
+from scripts.audio_chunking import diagnose_timestamped_chunk_merge
 
 
 class MergeAccountingTests(unittest.TestCase):
@@ -53,7 +54,7 @@ class MergeAccountingTests(unittest.TestCase):
                        merge_reject_tokens="0", merge_fallback_tokens="5",
                        merge_unaccounted_tokens="0", merge_input_token_chars="5",
                        merge_keep_token_chars="0", merge_reject_token_chars="0",
-                       merge_boundary_rejections="[]")
+                       merge_boundary_rejections="[]", merge_boundary_rejection_detail="[]")
         result = _merge_accounting_diagnostics([row])["merge_accounting"]
         self.assertEqual(result["fallback_tokens"], 5)
         self.assertEqual(result["keep_tokens"] + result["reject_tokens"], 0)
@@ -91,6 +92,7 @@ class MergeAccountingTests(unittest.TestCase):
         self.assertIn("merge_accounting", rendered)
         self.assertNotIn("MUST_NOT_LEAK", rendered)
         self.assertIn("boundary_rejections_by_side_and_distance", rendered)
+        self.assertIn("after_seam_from_left_chunk|lt_100ms", rendered)
 
 
 if __name__ == "__main__":
