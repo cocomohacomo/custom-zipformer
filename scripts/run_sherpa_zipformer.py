@@ -281,6 +281,8 @@ def main() -> int:
                 "merge_reject_tokens": merge_diagnostics.get("reject_tokens", 0),
                 "merge_fallback_tokens": merge_diagnostics.get("fallback_tokens", 0),
                 "merge_unaccounted_tokens": merge_diagnostics.get("unaccounted_tokens", 0),
+                "merge_input_token_chars": merge_diagnostics.get("input_token_chars", 0),
+                "merge_keep_token_chars": merge_diagnostics.get("keep_token_chars", 0),
                 "merge_reject_token_chars": merge_diagnostics.get("reject_token_chars", 0),
                 "merge_boundary_rejections": json.dumps(merge_diagnostics.get("boundary_rejections", []), separators=(",", ":")),
             })
