@@ -264,7 +264,7 @@ def _merge_accounting_diagnostics(rows: list[dict[str, str]]) -> dict:
                 raise ValueError("merge boundary correspondence side is invalid")
             if distance not in ("lt_100ms", "100_250ms", "250_500ms", "gte_500ms"):
                 raise ValueError("merge boundary correspondence distance is invalid")
-            if status not in ("matched_unique", "matched_ambiguous", "unmatched"):
+            if status not in ("matched_unique", "matched_ambiguous", "unmatched_no_candidate", "unmatched_conflict"):
                 raise ValueError("merge boundary correspondence status is invalid")
             if any(isinstance(x, bool) or not isinstance(x, int) or x < 0 for x in (count, chars)):
                 raise ValueError("merge boundary correspondence counts are invalid")
