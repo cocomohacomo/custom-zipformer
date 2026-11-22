@@ -128,6 +128,37 @@ def _audio_diagnostics(rows: list[dict[str, str]], mode: str) -> dict:
     }
 
 
+def _stage_diagnostics(rows: list[dict[str, str]]) -> dict:
+    """Aggregate decoder-stage counts without exposing token or transcript content."""
+    required = ("raw_token_count", "timestamp_count", "decoded_text_chars",
+                "final_text_chars", "token_density_per_second", "decode_seconds")
+    if any(any(row.get(key) in (None, "") for key in required) for row in rows):
+        return {}
+    totals = {key: 0.0 for key in required}
+    shorter = 0
+    timestamp_mismatch = 0
+    for row in rows:
+        for key in required:
+            value = _finite_float(row.get(key), key)
+            totals[key] += value
+        if float(row["final_text_chars"]) < float(row["decoded_text_chars"]):
+            shorter += 1
+        if float(row["raw_token_count"]) != float(row["timestamp_count"]):
+            timestamp_mismatch += 1
+    return {
+        "decoder_stages": {
+            "total_raw_tokens": int(totals["raw_token_count"]),
+            "total_timestamps": int(totals["timestamp_count"]),
+            "total_decoded_text_chars": int(totals["decoded_text_chars"]),
+            "total_final_text_chars": int(totals["final_text_chars"]),
+            "cases_final_shorter_than_decoded": shorter,
+            "cases_token_timestamp_count_mismatch": timestamp_mismatch,
+            "mean_token_density_per_second": totals["token_density_per_second"] / len(rows),
+            "total_decode_seconds": totals["decode_seconds"],
+        }
+    }
+
+
 def validate_evaluation(root: Path) -> dict:
     manifest = _read_json(root / "manifest.json")
     entries = manifest.get("manifest")
@@ -204,6 +235,7 @@ def validate_evaluation(root: Path) -> dict:
             "severe_deletions": omission_counts["severe_deletion"],
         }
         result.update(_audio_diagnostics(rows, mode))
+        result.update(_stage_diagnostics(rows))
         if mode == "overlap_2s":
             methods: dict[str, int] = {}
             for row in rows:
