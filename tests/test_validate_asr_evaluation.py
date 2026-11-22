@@ -9,7 +9,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from scripts.validate_asr_evaluation import MODES, main, validate_evaluation
+from scripts.validate_asr_evaluation import MODES, _stage_diagnostics, main, validate_evaluation
 
 
 class ValidateAsrEvaluationTests(unittest.TestCase):
@@ -68,6 +68,30 @@ class ValidateAsrEvaluationTests(unittest.TestCase):
             self.assertEqual(result["modes"]["whole"]["chunking"]["empty_output_chunk_rate"], 0.5)
 
 
+
+    def test_stage_diagnostics_aggregates_and_detects_stage_loss(self):
+        rows = [
+            {"raw_token_count": "8", "timestamp_count": "8", "decoded_text_chars": "12",
+             "final_text_chars": "11", "token_density_per_second": "4.0", "decode_seconds": "0.2"},
+            {"raw_token_count": "4", "timestamp_count": "3", "decoded_text_chars": "5",
+             "final_text_chars": "5", "token_density_per_second": "2.0", "decode_seconds": "0.1"},
+        ]
+        result = _stage_diagnostics(rows)["decoder_stages"]
+        self.assertEqual(result["total_raw_tokens"], 12)
+        self.assertEqual(result["total_timestamps"], 11)
+        self.assertEqual(result["total_decoded_text_chars"], 17)
+        self.assertEqual(result["total_final_text_chars"], 16)
+        self.assertEqual(result["cases_final_shorter_than_decoded"], 1)
+        self.assertEqual(result["cases_token_timestamp_count_mismatch"], 1)
+        self.assertEqual(result["mean_token_density_per_second"], 3.0)
+        self.assertAlmostEqual(result["total_decode_seconds"], 0.3)
+
+    def test_stage_diagnostics_reject_invalid_numeric_values(self):
+        rows = [{"raw_token_count": "NaN", "timestamp_count": "1",
+                 "decoded_text_chars": "1", "final_text_chars": "1",
+                 "token_density_per_second": "1", "decode_seconds": "1"}]
+        with self.assertRaisesRegex(ValueError, "non-finite"):
+            _stage_diagnostics(rows)
 
     def test_reference_transcripts_must_match_exactly_across_modes(self):
         with tempfile.TemporaryDirectory() as directory:
