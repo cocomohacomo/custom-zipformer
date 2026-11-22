@@ -114,10 +114,11 @@ class ZipformerInferenceSourceTests(unittest.TestCase):
         results, durations = decode_audio_chunks(recognizer, [tiny, silent])
         self.assertEqual([len(audio) for _, audio in recognizer.received], [1, 400])
         self.assertTrue(all(rate == 16000 for rate, _ in recognizer.received))
-        self.assertEqual(results, [
-            {"text": "", "tokens": [], "timestamps": []},
-            {"text": "", "tokens": [], "timestamps": []},
-        ])
+        self.assertEqual([item["text"] for item in results], ["", ""])
+        self.assertEqual([item["tokens"] for item in results], [[], []])
+        self.assertEqual([item["timestamps"] for item in results], [[], []])
+        self.assertEqual(len(results), 2)
+        self.assertTrue(all(0 <= item["decode_seconds"] < 1 for item in results))
         self.assertEqual(durations, [1 / 16000, 0.025])
 
     def test_inference_runner_is_valid_python(self):
