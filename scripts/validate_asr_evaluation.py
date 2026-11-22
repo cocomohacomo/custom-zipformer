@@ -181,7 +181,8 @@ def _merge_accounting_diagnostics(rows: list[dict[str, str]]) -> dict:
     totals = {key: 0 for key in ("input_tokens", "keep_tokens", "reject_tokens", "fallback_tokens", "input_token_chars", "keep_token_chars", "reject_token_chars")}
     methods = {"timestamp": 0, "text_fallback": 0}
     boundaries: dict[str, dict[str, int]] = {}
-    boundary_detail: dict[str, dict[str, int]] = {}\n    correspondence_detail: dict[str, dict[str, int]] = {}
+    boundary_detail: dict[str, dict[str, int]] = {}
+    correspondence_detail: dict[str, dict[str, int]] = {}
     for row in rows:
         method = row.get("overlap_merge_method")
         if method not in methods:
