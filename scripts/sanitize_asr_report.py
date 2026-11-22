@@ -172,15 +172,22 @@ def sanitize_execution_diagnostics(report: dict) -> dict:
             }
         stages = item.get("decoder_stages")
         if isinstance(stages, dict):
-            stage_keys = (
-                "total_raw_tokens", "total_timestamps", "total_decoded_text_chars",
-                "total_final_text_chars", "cases_final_shorter_than_decoded",
+            stage_count_keys = (
+                "total_raw_tokens", "total_timestamps", "total_raw_decoder_text_chars",
+                "total_chunk_text_chars", "total_merged_text_chars", "total_final_text_chars",
+                "cases_shorter_after_merge", "cases_shorter_after_normalization",
                 "cases_token_timestamp_count_mismatch",
             )
             clean_stages = {
                 key: _number(stages.get(key), integer=True, nonnegative=True)
-                for key in stage_keys
+                for key in stage_count_keys
             }
+            clean_stages["chunk_merge_char_delta"] = _number(
+                stages.get("chunk_merge_char_delta"), integer=True
+            )
+            clean_stages["final_normalization_char_delta"] = _number(
+                stages.get("final_normalization_char_delta"), integer=True
+            )
             clean_stages["mean_token_density_per_second"] = _number(
                 stages.get("mean_token_density_per_second"), nonnegative=True
             )
