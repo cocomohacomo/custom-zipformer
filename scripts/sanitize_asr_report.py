@@ -228,7 +228,7 @@ def sanitize_execution_diagnostics(report: dict) -> dict:
                 clean["merge_accounting"]["boundary_rejections_by_side_and_distance"] = clean_detail
                 raw_correspondence = accounting.get("boundary_rejection_correspondence")
                 clean_correspondence = {}
-                allowed_statuses = ("matched_unique", "matched_ambiguous", "unmatched")
+                allowed_statuses = ("matched_unique", "matched_ambiguous", "unmatched_no_candidate", "unmatched_conflict")
                 if isinstance(raw_correspondence, dict):
                     for key, value in sorted(raw_correspondence.items()):
                         parts = key.split("|") if isinstance(key, str) else []
