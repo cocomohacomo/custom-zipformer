@@ -112,8 +112,6 @@ def main() -> int:
         p.error("--blank-penalty must be finite")
     if args.max_active_paths < 1:
         p.error("--max-active-paths must be >= 1")
-    if args.decoding_method == "greedy_search" and args.max_active_paths != 4:
-        p.error("--max-active-paths is only configurable with modified_beam_search")
     if args.max_gain_db < 0:
         p.error("--max-gain-db must be >= 0")
     if args.chunk_seconds is not None and args.chunk_seconds <= 0:
