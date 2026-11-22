@@ -184,13 +184,16 @@ def main() -> int:
     args = parser.parse_args()
     if args.limit < 1 or args.limit > 500:
         parser.error("--limit must be between 1 and 500")
-    stage = "dataset preparation"
     try:
         metadata = prepare_dataset(args.limit, args.output, args.seed)
     except Exception as exc:
-        # Report only the failing stage and exception class. Never print paths,
-        # utterance IDs, transcript text, signed URLs, or request headers.
-        print(f"FLEURS dataset preparation failed at {stage}: {type(exc).__name__}.")
+        # Report only exception classes. Never print paths, utterance IDs,
+        # transcript text, signed URLs, or request headers.
+        root_cause = exc.__cause__ or exc
+        print(
+            "FLEURS dataset preparation failed "
+            f"({type(exc).__name__}; cause={type(root_cause).__name__})."
+        )
         return 1
     print(json.dumps({
         "dataset": metadata["dataset_id"],
