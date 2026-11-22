@@ -9,6 +9,33 @@ on:
         required: true
         default: 100
         type: number
+      decoding_method:
+        description: Decoder search mode for paired evaluation
+        required: true
+        default: greedy_search
+        type: choice
+        options:
+          - greedy_search
+          - modified_beam_search
+      blank_penalty:
+        description: Transducer blank penalty
+        required: true
+        default: "0.0"
+        type: choice
+        options:
+          - "0.0"
+          - "0.1"
+          - "0.3"
+          - "0.5"
+      max_active_paths:
+        description: Modified Beam Search active paths (ignored by Greedy Search)
+        required: true
+        default: "4"
+        type: choice
+        options:
+          - "4"
+          - "8"
+          - "16"
       acknowledge_license:
         description: Confirm JSUT research/personal-use terms and no audio redistribution
         required: true
@@ -86,13 +113,13 @@ jobs:
             find models/zipformer-ja -type f -name "$pattern" -print -quit | grep -q . || { echo "::error::Missing model file matching $pattern"; exit 1; }
           done
       - name: Run whole-utterance inference
-        run: python scripts/run_sherpa_zipformer.py tests/data/jsut_ja/manifest.json --model-dir models/zipformer-ja --threads 2 --output-tsv tests/data/jsut_ja/transcripts.tsv
+        run: python scripts/run_sherpa_zipformer.py tests/data/jsut_ja/manifest.json --model-dir models/zipformer-ja --threads 2 --decoding-method "${{ inputs.decoding_method }}" --blank-penalty "${{ inputs.blank_penalty }}" --max-active-paths "${{ inputs.max_active_paths }}" --output-tsv tests/data/jsut_ja/transcripts.tsv
       - name: Run fixed 15-second chunk comparison
-        run: python scripts/run_sherpa_zipformer.py tests/data/jsut_ja/manifest.json --model-dir models/zipformer-ja --threads 2 --chunk-seconds 15 --output-tsv tests/data/jsut_ja/transcripts_chunked_15s.tsv
+        run: python scripts/run_sherpa_zipformer.py tests/data/jsut_ja/manifest.json --model-dir models/zipformer-ja --threads 2 --chunk-seconds 15 --decoding-method "${{ inputs.decoding_method }}" --blank-penalty "${{ inputs.blank_penalty }}" --max-active-paths "${{ inputs.max_active_paths }}" --output-tsv tests/data/jsut_ja/transcripts_chunked_15s.tsv
       - name: Run silence-aware chunk comparison
-        run: python scripts/run_sherpa_zipformer.py tests/data/jsut_ja/manifest.json --model-dir models/zipformer-ja --threads 2 --silence-aware-chunk-seconds 15 --chunk-search-window-seconds 2 --output-tsv tests/data/jsut_ja/transcripts_silence_aware_15s.tsv
+        run: python scripts/run_sherpa_zipformer.py tests/data/jsut_ja/manifest.json --model-dir models/zipformer-ja --threads 2 --silence-aware-chunk-seconds 15 --chunk-search-window-seconds 2 --decoding-method "${{ inputs.decoding_method }}" --blank-penalty "${{ inputs.blank_penalty }}" --max-active-paths "${{ inputs.max_active_paths }}" --output-tsv tests/data/jsut_ja/transcripts_silence_aware_15s.tsv
       - name: Run 2-second overlap comparison
-        run: python scripts/run_sherpa_zipformer.py tests/data/jsut_ja/manifest.json --model-dir models/zipformer-ja --threads 2 --chunk-seconds 15 --chunk-overlap-seconds 2 --output-tsv tests/data/jsut_ja/transcripts_overlap_2s.tsv
+        run: python scripts/run_sherpa_zipformer.py tests/data/jsut_ja/manifest.json --model-dir models/zipformer-ja --threads 2 --chunk-seconds 15 --chunk-overlap-seconds 2 --decoding-method "${{ inputs.decoding_method }}" --blank-penalty "${{ inputs.blank_penalty }}" --max-active-paths "${{ inputs.max_active_paths }}" --output-tsv tests/data/jsut_ja/transcripts_overlap_2s.tsv
       - name: Calculate metrics
         run: |
           for mode in "" "_chunked_15s" "_silence_aware_15s" "_overlap_2s"; do
