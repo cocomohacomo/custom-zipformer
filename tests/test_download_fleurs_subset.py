@@ -20,7 +20,7 @@ class FleursSubsetTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "dev.tsv"
             path.write_text(
-                "speaker_1\\tclip.wav\\tこんにちは\\tこんにちは\\tこ ん に ち は\\t16000\\n",
+                "speaker_1\tclip.wav\tこんにちは\tこんにちは\tこ ん に ち は\t16000\n",
                 encoding="utf-8",
             )
             self.assertEqual(
