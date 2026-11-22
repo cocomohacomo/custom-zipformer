@@ -19,6 +19,7 @@ class MergeAccountingTests(unittest.TestCase):
             "merge_boundary_rejections": '[{"chunk_position":0,"rejected_tokens":1,"rejected_token_chars":1}]',
             "merge_boundary_rejection_detail": '[{"side":"after_seam_from_left_chunk","distance_bucket":"lt_100ms","rejected_tokens":2,"rejected_token_chars":2}]',
             "merge_boundary_rejection_correspondence": '[{"side":"after_seam_from_left_chunk","distance_bucket":"lt_100ms","status":"unmatched_no_candidate","rejected_tokens":2,"rejected_token_chars":2}]',
+            "merge_boundary_rejection_sensitivity": '[{"threshold_ms":100,"side":"after_seam_from_left_chunk","distance_bucket":"lt_100ms","status":"unmatched_no_candidate","rejected_tokens":2,"rejected_token_chars":2},{"threshold_ms":250,"side":"after_seam_from_left_chunk","distance_bucket":"lt_100ms","status":"unmatched_no_candidate","rejected_tokens":2,"rejected_token_chars":2},{"threshold_ms":500,"side":"after_seam_from_left_chunk","distance_bucket":"lt_100ms","status":"unmatched_no_candidate","rejected_tokens":2,"rejected_token_chars":2}]',
         }
         value.update(overrides)
         return value
@@ -28,7 +29,7 @@ class MergeAccountingTests(unittest.TestCase):
             "input_tokens": 7, "keep_tokens": 4, "reject_tokens": 3,
             "fallback_tokens": 0, "unaccounted_tokens": 0,
             "input_token_chars": 12, "keep_token_chars": 7,
-            "reject_token_chars": 5, "boundary_rejections": [], "boundary_rejection_detail": [], "boundary_rejection_correspondence": [],
+            "reject_token_chars": 5, "boundary_rejections": [], "boundary_rejection_detail": [], "boundary_rejection_correspondence": [], "boundary_rejection_sensitivity": [],
         })
         self.assertEqual(fields["merge_input_token_chars"], 12)
         self.assertEqual(fields["merge_keep_token_chars"], 7)
@@ -56,7 +57,7 @@ class MergeAccountingTests(unittest.TestCase):
                        merge_reject_tokens="0", merge_fallback_tokens="5",
                        merge_unaccounted_tokens="0", merge_input_token_chars="5",
                        merge_keep_token_chars="0", merge_reject_token_chars="0",
-                       merge_boundary_rejections="[]", merge_boundary_rejection_detail="[]", merge_boundary_rejection_correspondence="[]")
+                       merge_boundary_rejections="[]", merge_boundary_rejection_detail="[]", merge_boundary_rejection_correspondence="[]", merge_boundary_rejection_sensitivity="[]")
         result = _merge_accounting_diagnostics([row])["merge_accounting"]
         self.assertEqual(result["fallback_tokens"], 5)
         self.assertEqual(result["keep_tokens"] + result["reject_tokens"], 0)

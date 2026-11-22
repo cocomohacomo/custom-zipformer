@@ -241,6 +241,15 @@ def sanitize_execution_diagnostics(report: dict) -> dict:
                             if tokens is not None and chars is not None:
                                 clean_correspondence[key] = {"rejected_tokens": tokens, "rejected_token_chars": chars}
                 clean["merge_accounting"]["boundary_rejection_correspondence"] = clean_correspondence
+                raw_sensitivity = accounting.get("boundary_rejection_sensitivity")
+                clean_sensitivity = {}
+                if isinstance(raw_sensitivity, dict):
+                    for key, value in sorted(raw_sensitivity.items()):
+                        parts = key.split("|") if isinstance(key, str) else []
+                        if (len(parts) == 4 and parts[0] in ("100", "250", "500") and parts[1] in ("after_seam_from_left_chunk", "before_seam_from_right_chunk") and parts[2] in ("lt_100ms", "100_250ms", "250_500ms", "gte_500ms") and parts[3] in allowed_statuses and isinstance(value, dict)):
+                            tokens = _number(value.get("rejected_tokens"), integer=True, nonnegative=True); chars = _number(value.get("rejected_token_chars"), integer=True, nonnegative=True)
+                            if tokens is not None and chars is not None: clean_sensitivity[key] = {"rejected_tokens": tokens, "rejected_token_chars": chars}
+                clean["merge_accounting"]["boundary_rejection_sensitivity"] = clean_sensitivity
         output[mode] = clean
     return output
 

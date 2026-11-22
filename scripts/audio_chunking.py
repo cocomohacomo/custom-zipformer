@@ -279,63 +279,43 @@ def diagnose_timestamped_chunk_merge(chunk_results, chunk_start_seconds, chunk_d
             for (side, bucket), counts in sorted(detail_counts.items())
         ]
 
-        # Conservative token correspondence: exact token text and <=250ms
-        # absolute-time difference. Use augmenting paths to maximize one-to-one
-        # matches before classifying candidates that lost an assignment conflict.
-        max_match_delta_seconds = 0.25
-        candidate_edges = [[] for _ in rejected_records]
+        # Diagnostic-only correspondence sensitivity; never affects merge output.
         kept_by_chunk = {}
-        for kept_record in kept_records:
-            kept_by_chunk.setdefault(kept_record["chunk"], []).append(kept_record)
-        for rejected_index, record in enumerate(rejected_records):
-            for kept_record in kept_by_chunk.get(record["neighbor"], []):
-                delta = abs(record["time"] - kept_record["time"])
-                if record["text"] == kept_record["text"] and delta <= max_match_delta_seconds:
-                    kept_key = (kept_record["chunk"], kept_record["token_index"])
-                    candidate_edges[rejected_index].append((delta, kept_key))
-            candidate_edges[rejected_index].sort(key=lambda item: (item[0], item[1]))
-        matched_kept = {}
-
-        def assign(rejected_index, seen_kept):
-            for _, kept_key in candidate_edges[rejected_index]:
-                if kept_key in seen_kept:
-                    continue
-                seen_kept.add(kept_key)
-                previous = matched_kept.get(kept_key)
-                if previous is None or assign(previous, seen_kept):
-                    matched_kept[kept_key] = rejected_index
-                    return True
-            return False
-
-        # Constrained records first; augmenting paths preserve maximum cardinality.
-        order = sorted(
-            range(len(rejected_records)),
-            key=lambda index: (len(candidate_edges[index]),
-                               candidate_edges[index][0][0] if candidate_edges[index] else float("inf"),
-                               index),
-        )
-        matched_rejected = set()
-        for rejected_index in order:
-            if candidate_edges[rejected_index] and assign(rejected_index, set()):
-                matched_rejected.add(rejected_index)
-        correspondence = {}
-        for rejected_index, record in enumerate(rejected_records):
-            candidate_count = len(candidate_edges[rejected_index])
-            if rejected_index in matched_rejected:
-                status = "matched_ambiguous" if candidate_count > 1 else "matched_unique"
-            elif candidate_count:
-                status = "unmatched_conflict"
-            else:
-                status = "unmatched_no_candidate"
-            key = (record["side"], record["distance_bucket"], status)
-            counts = correspondence.setdefault(key, [0, 0])
-            counts[0] += 1
-            counts[1] += len(record["text"])
-        correspondence_detail = [
-            {"side": side, "distance_bucket": bucket, "status": status,
-             "rejected_tokens": counts[0], "rejected_token_chars": counts[1]}
-            for (side, bucket, status), counts in sorted(correspondence.items())
-        ]
+        for kept_record in kept_records: kept_by_chunk.setdefault(kept_record["chunk"], []).append(kept_record)
+        sensitivity_detail = []
+        for threshold_ms in (100, 250, 500):
+            limit = threshold_ms / 1000.0
+            edges = [[] for _ in rejected_records]
+            for ri, record in enumerate(rejected_records):
+                for kept_record in kept_by_chunk.get(record["neighbor"], []):
+                    delta = abs(record["time"] - kept_record["time"])
+                    if record["text"] == kept_record["text"] and delta <= limit:
+                        edges[ri].append((delta, (kept_record["chunk"], kept_record["token_index"])))
+                edges[ri].sort(key=lambda item: (item[0], item[1]))
+            assigned = {}
+            def assign(ri, seen):
+                for _, key in edges[ri]:
+                    if key in seen: continue
+                    seen.add(key)
+                    previous = assigned.get(key)
+                    if previous is None or assign(previous, seen):
+                        assigned[key] = ri
+                        return True
+                return False
+            order = sorted(range(len(rejected_records)), key=lambda ri: (len(edges[ri]), edges[ri][0][0] if edges[ri] else float("inf"), ri))
+            matched = set()
+            for ri in order:
+                if edges[ri] and assign(ri, set()): matched.add(ri)
+            counts = {}
+            for ri, record in enumerate(rejected_records):
+                n = len(edges[ri])
+                status = ("matched_ambiguous" if n > 1 else "matched_unique") if ri in matched else ("unmatched_conflict" if n else "unmatched_no_candidate")
+                key = (record["side"], record["distance_bucket"], status)
+                pair = counts.setdefault(key, [0, 0]); pair[0] += 1; pair[1] += len(record["text"])
+            for (side, bucket, status), pair in sorted(counts.items()):
+                sensitivity_detail.append({"threshold_ms": threshold_ms, "side": side, "distance_bucket": bucket, "status": status, "rejected_tokens": pair[0], "rejected_token_chars": pair[1]})
+            if threshold_ms == 250:
+                correspondence_detail = [{"side": side, "distance_bucket": bucket, "status": status, "rejected_tokens": pair[0], "rejected_token_chars": pair[1]} for (side, bucket, status), pair in sorted(counts.items())]
     return merged, method, {
         "input_tokens": input_count,
         "keep_tokens": kept,
@@ -352,4 +332,5 @@ def diagnose_timestamped_chunk_merge(chunk_results, chunk_start_seconds, chunk_d
         "boundary_rejections": boundary_counts,
         "boundary_rejection_detail": rejection_detail,
         "boundary_rejection_correspondence": correspondence_detail if method == "timestamp" else [],
+        "boundary_rejection_sensitivity": sensitivity_detail if method == "timestamp" else [],
     }

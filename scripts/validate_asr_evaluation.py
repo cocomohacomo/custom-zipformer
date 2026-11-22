@@ -183,6 +183,7 @@ def _merge_accounting_diagnostics(rows: list[dict[str, str]]) -> dict:
     boundaries: dict[str, dict[str, int]] = {}
     boundary_detail: dict[str, dict[str, int]] = {}
     correspondence_detail: dict[str, dict[str, int]] = {}
+    sensitivity_detail: dict[str, dict[str, int]] = {}
     for row in rows:
         method = row.get("overlap_merge_method")
         if method not in methods:
@@ -279,9 +280,28 @@ def _merge_accounting_diagnostics(rows: list[dict[str, str]]) -> dict:
             or correspondence_chars != values["reject_token_chars"]
         ):
             raise ValueError("boundary correspondence does not reconcile with rejected tokens")
+        try: sensitivity = json.loads(row.get("merge_boundary_rejection_sensitivity", ""))
+        except (TypeError, json.JSONDecodeError) as exc: raise ValueError("merge boundary sensitivity diagnostics are invalid") from exc
+        if not isinstance(sensitivity, list): raise ValueError("merge boundary sensitivity diagnostics must be a list")
+        sensitivity_totals = {100: [0, 0], 250: [0, 0], 500: [0, 0]}
+        for item in sensitivity:
+            if not isinstance(item, dict): raise ValueError("merge boundary sensitivity record is invalid")
+            threshold = item.get("threshold_ms"); side = item.get("side"); distance = item.get("distance_bucket"); status = item.get("status")
+            count = item.get("rejected_tokens"); chars = item.get("rejected_token_chars")
+            if threshold not in (100, 250, 500): raise ValueError("merge boundary sensitivity threshold is invalid")
+            if side not in ("after_seam_from_left_chunk", "before_seam_from_right_chunk"): raise ValueError("merge boundary sensitivity side is invalid")
+            if distance not in ("lt_100ms", "100_250ms", "250_500ms", "gte_500ms"): raise ValueError("merge boundary sensitivity distance is invalid")
+            if status not in ("matched_unique", "matched_ambiguous", "unmatched_no_candidate", "unmatched_conflict"): raise ValueError("merge boundary sensitivity status is invalid")
+            if any(isinstance(x, bool) or not isinstance(x, int) or x < 0 for x in (count, chars)): raise ValueError("merge boundary sensitivity counts are invalid")
+            key = str(threshold) + "|" + side + "|" + distance + "|" + status
+            bucket = sensitivity_detail.setdefault(key, {"rejected_tokens": 0, "rejected_token_chars": 0})
+            bucket["rejected_tokens"] += count; bucket["rejected_token_chars"] += chars
+            sensitivity_totals[threshold][0] += count; sensitivity_totals[threshold][1] += chars
+        if method == "timestamp" and any(sensitivity_totals[x] != [values["reject_tokens"], values["reject_token_chars"]] for x in (100, 250, 500)):
+            raise ValueError("boundary sensitivity does not reconcile with rejected tokens")
     if totals["input_tokens"] != totals["keep_tokens"] + totals["reject_tokens"] + totals["fallback_tokens"]:
         raise ValueError("aggregate merge token accounting is inconsistent")
-    return {"merge_accounting": {**totals, "timestamp_cases": methods["timestamp"], "fallback_cases": methods["text_fallback"], "unaccounted_tokens": 0, "accounting_consistent": True, "boundary_rejections_by_chunk": boundaries, "boundary_rejections_by_side_and_distance": boundary_detail, "boundary_rejection_correspondence": correspondence_detail}}
+    return {"merge_accounting": {**totals, "timestamp_cases": methods["timestamp"], "fallback_cases": methods["text_fallback"], "unaccounted_tokens": 0, "accounting_consistent": True, "boundary_rejections_by_chunk": boundaries, "boundary_rejections_by_side_and_distance": boundary_detail, "boundary_rejection_correspondence": correspondence_detail, "boundary_rejection_sensitivity": sensitivity_detail}}
 
 
 def validate_evaluation(root: Path) -> dict:

@@ -104,6 +104,9 @@ def _merge_diagnostic_tsv_fields(diagnostics: dict) -> dict[str, object]:
         "merge_boundary_rejection_correspondence": json.dumps(
             diagnostics.get("boundary_rejection_correspondence", []), separators=(",", ":")
         ),
+        "merge_boundary_rejection_sensitivity": json.dumps(
+            diagnostics.get("boundary_rejection_sensitivity", []), separators=(",", ":")
+        ),
     }
 
 
