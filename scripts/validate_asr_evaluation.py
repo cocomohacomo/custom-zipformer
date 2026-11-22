@@ -181,7 +181,7 @@ def _merge_accounting_diagnostics(rows: list[dict[str, str]]) -> dict:
     totals = {key: 0 for key in ("input_tokens", "keep_tokens", "reject_tokens", "fallback_tokens", "input_token_chars", "keep_token_chars", "reject_token_chars")}
     methods = {"timestamp": 0, "text_fallback": 0}
     boundaries: dict[str, dict[str, int]] = {}
-    boundary_detail: dict[str, dict[str, int]] = {}
+    boundary_detail: dict[str, dict[str, int]] = {}\n    correspondence_detail: dict[str, dict[str, int]] = {}
     for row in rows:
         method = row.get("overlap_merge_method")
         if method not in methods:
@@ -247,9 +247,40 @@ def _merge_accounting_diagnostics(rows: list[dict[str, str]]) -> dict:
             or detail_row_chars != values["reject_token_chars"]
         ):
             raise ValueError("boundary rejection detail does not reconcile with rejected tokens")
+        try:
+            correspondence = json.loads(row.get("merge_boundary_rejection_correspondence", ""))
+        except (TypeError, json.JSONDecodeError) as exc:
+            raise ValueError("merge boundary correspondence diagnostics are invalid") from exc
+        if not isinstance(correspondence, list):
+            raise ValueError("merge boundary correspondence diagnostics must be a list")
+        correspondence_tokens = correspondence_chars = 0
+        for item in correspondence:
+            if not isinstance(item, dict):
+                raise ValueError("merge boundary correspondence record is invalid")
+            side, distance, status = item.get("side"), item.get("distance_bucket"), item.get("status")
+            count, chars = item.get("rejected_tokens"), item.get("rejected_token_chars")
+            if side not in ("after_seam_from_left_chunk", "before_seam_from_right_chunk"):
+                raise ValueError("merge boundary correspondence side is invalid")
+            if distance not in ("lt_100ms", "100_250ms", "250_500ms", "gte_500ms"):
+                raise ValueError("merge boundary correspondence distance is invalid")
+            if status not in ("matched_unique", "matched_ambiguous", "unmatched"):
+                raise ValueError("merge boundary correspondence status is invalid")
+            if any(isinstance(x, bool) or not isinstance(x, int) or x < 0 for x in (count, chars)):
+                raise ValueError("merge boundary correspondence counts are invalid")
+            key = side + "|" + distance + "|" + status
+            bucket = correspondence_detail.setdefault(key, {"rejected_tokens": 0, "rejected_token_chars": 0})
+            bucket["rejected_tokens"] += count
+            bucket["rejected_token_chars"] += chars
+            correspondence_tokens += count
+            correspondence_chars += chars
+        if method == "timestamp" and (
+            correspondence_tokens != values["reject_tokens"]
+            or correspondence_chars != values["reject_token_chars"]
+        ):
+            raise ValueError("boundary correspondence does not reconcile with rejected tokens")
     if totals["input_tokens"] != totals["keep_tokens"] + totals["reject_tokens"] + totals["fallback_tokens"]:
         raise ValueError("aggregate merge token accounting is inconsistent")
-    return {"merge_accounting": {**totals, "timestamp_cases": methods["timestamp"], "fallback_cases": methods["text_fallback"], "unaccounted_tokens": 0, "accounting_consistent": True, "boundary_rejections_by_chunk": boundaries, "boundary_rejections_by_side_and_distance": boundary_detail}}
+    return {"merge_accounting": {**totals, "timestamp_cases": methods["timestamp"], "fallback_cases": methods["text_fallback"], "unaccounted_tokens": 0, "accounting_consistent": True, "boundary_rejections_by_chunk": boundaries, "boundary_rejections_by_side_and_distance": boundary_detail, "boundary_rejection_correspondence": correspondence_detail}}
 
 
 def validate_evaluation(root: Path) -> dict:
