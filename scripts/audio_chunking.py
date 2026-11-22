@@ -238,42 +238,84 @@ def diagnose_timestamped_chunk_merge(chunk_results, chunk_start_seconds, chunk_d
                 upper_seams[i] = seam
                 lower_seams[i + 1] = seam
         detail_counts = {}
+        rejected_records = []
+        kept_records = []
         for i, item in enumerate(chunk_results):
-            local_rejected = local_rejected_chars = 0
-            for token, timestamp in zip(item.get("tokens") or [], item.get("timestamps") or []):
+            for token_index, (token, timestamp) in enumerate(zip(item.get("tokens") or [], item.get("timestamps") or [])):
                 rendered = str(token).replace("▁", " ")
                 absolute_time = starts[i] + float(timestamp)
+                record = {"chunk": i, "token_index": token_index, "text": rendered, "time": absolute_time}
                 if lower[i] <= absolute_time < upper[i]:
                     kept += 1
                     kept_chars += len(rendered)
+                    kept_records.append(record)
                 else:
                     rejected += 1
                     rejected_chars += len(rendered)
-                    local_rejected += 1
-                    local_rejected_chars += len(rendered)
+                    side = seam = neighbor = None
                     if absolute_time >= upper[i] and upper_seams[i] is not None:
-                        side = "after_seam_from_left_chunk"
-                        distance = abs(absolute_time - upper_seams[i])
+                        side, seam, neighbor = "after_seam_from_left_chunk", upper_seams[i], i + 1
                     elif absolute_time < lower[i] and lower_seams[i] is not None:
-                        side = "before_seam_from_right_chunk"
-                        distance = abs(absolute_time - lower_seams[i])
-                    else:
-                        continue
-                    bucket_index = next((j for j, edge in enumerate(distance_edges) if distance < edge), len(distance_edges))
-                    key = (side, distance_labels[bucket_index])
-                    counts = detail_counts.setdefault(key, [0, 0])
-                    counts[0] += 1
-                    counts[1] += len(rendered)
-            if local_rejected:
+                        side, seam, neighbor = "before_seam_from_right_chunk", lower_seams[i], i - 1
+                    if side is not None:
+                        distance = abs(absolute_time - seam)
+                        bucket_index = next((j for j, edge in enumerate(distance_edges) if distance < edge), len(distance_edges))
+                        key = (side, distance_labels[bucket_index])
+                        counts = detail_counts.setdefault(key, [0, 0])
+                        counts[0] += 1
+                        counts[1] += len(rendered)
+                        rejected_records.append({**record, "side": side, "distance_bucket": distance_labels[bucket_index],
+                                                 "neighbor": neighbor})
+            local = [record for record in rejected_records if record["chunk"] == i]
+            if local:
                 boundary_counts.append({
                     "chunk_position": i,
-                    "rejected_tokens": local_rejected,
-                    "rejected_token_chars": local_rejected_chars,
+                    "rejected_tokens": len(local),
+                    "rejected_token_chars": sum(len(record["text"]) for record in local),
                 })
         rejection_detail = [
             {"side": side, "distance_bucket": bucket, "rejected_tokens": counts[0],
              "rejected_token_chars": counts[1]}
             for (side, bucket), counts in sorted(detail_counts.items())
+        ]
+
+        # Match only against kept tokens in the directly adjacent chunk.
+        # Exact token text and <=1s absolute-time distance are required.
+        # Greedy minimum-distance assignment guarantees one-to-one matches.
+        max_match_delta_seconds = 1.0
+        candidate_edges, candidate_counts = [], [0] * len(rejected_records)
+        kept_by_chunk = {}
+        for record in kept_records:
+            kept_by_chunk.setdefault(record["chunk"], []).append(record)
+        for rejected_index, record in enumerate(rejected_records):
+            for kept_record in kept_by_chunk.get(record["neighbor"], []):
+                delta = abs(record["time"] - kept_record["time"])
+                if record["text"] == kept_record["text"] and delta <= max_match_delta_seconds:
+                    candidate_counts[rejected_index] += 1
+                    candidate_edges.append((delta, rejected_index, kept_record["chunk"], kept_record["token_index"]))
+        used_rejected, used_kept, correspondence = set(), set(), {}
+        for delta, rejected_index, chunk_index, token_index in sorted(candidate_edges):
+            kept_key = (chunk_index, token_index)
+            if rejected_index in used_rejected or kept_key in used_kept:
+                continue
+            used_rejected.add(rejected_index)
+            used_kept.add(kept_key)
+            record = rejected_records[rejected_index]
+            status = "matched_ambiguous" if candidate_counts[rejected_index] > 1 else "matched_unique"
+            key = (record["side"], record["distance_bucket"], status)
+            counts = correspondence.setdefault(key, [0, 0])
+            counts[0] += 1
+            counts[1] += len(record["text"])
+        for rejected_index, record in enumerate(rejected_records):
+            if rejected_index not in used_rejected:
+                key = (record["side"], record["distance_bucket"], "unmatched")
+                counts = correspondence.setdefault(key, [0, 0])
+                counts[0] += 1
+                counts[1] += len(record["text"])
+        correspondence_detail = [
+            {"side": side, "distance_bucket": bucket, "status": status,
+             "rejected_tokens": counts[0], "rejected_token_chars": counts[1]}
+            for (side, bucket, status), counts in sorted(correspondence.items())
         ]
     return merged, method, {
         "input_tokens": input_count,
@@ -289,5 +331,5 @@ def diagnose_timestamped_chunk_merge(chunk_results, chunk_start_seconds, chunk_d
         ),
         "accounting_applicable": method == "timestamp",
         "boundary_rejections": boundary_counts,
-        "boundary_rejection_detail": rejection_detail,
+        "boundary_rejection_detail": rejection_detail,\n        "boundary_rejection_correspondence": correspondence_detail if method == "timestamp" else [],
     }
