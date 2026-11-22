@@ -41,24 +41,43 @@ def sha256(path: Path) -> str:
 
 
 def read_rows(path: Path) -> list[dict[str, str]]:
+    """Read official FLEURS TSV (headerless) and compatible named-column TSVs."""
     with path.open(encoding="utf-8", newline="") as stream:
-        rows = list(csv.DictReader(stream, delimiter="\t"))
-    required = {"file_name", "transcription"}
-    if not rows or not required.issubset(rows[0]):
-        raise ValueError(f"FLEURS TSV missing required columns: {required}")
+        raw_rows = list(csv.reader(stream, delimiter="\\t"))
+    if not raw_rows:
+        raise ValueError("FLEURS TSV is empty")
+
+    header = [cell.strip().lower() for cell in raw_rows[0]]
+    if "file_name" in header and "transcription" in header:
+        file_index = header.index("file_name")
+        text_index = header.index("transcription")
+        data_rows = raw_rows[1:]
+    elif "path" in header and "transcription" in header:
+        file_index = header.index("path")
+        text_index = header.index("transcription")
+        data_rows = raw_rows[1:]
+    else:
+        # Official google/fleurs data/ja_jp/{split}.tsv is headerless:
+        # speaker_id, filename, transcription, normalized, ...
+        if len(raw_rows[0]) < 3:
+            raise ValueError("FLEURS TSV has fewer than three columns")
+        file_index, text_index = 1, 2
+        data_rows = raw_rows
+
     unique: dict[str, dict[str, str]] = {}
-    for row in rows:
-        name = Path(row["file_name"]).name
-        text = row["transcription"].strip()
-        if not name or name != row["file_name"] or not text:
+    for cells in data_rows:
+        if len(cells) <= max(file_index, text_index):
+            continue
+        name = Path(cells[file_index]).name
+        text = cells[text_index].strip()
+        if not name or name != cells[file_index] or not text:
             continue
         if name in unique:
-            raise ValueError("Duplicate FLEURS audio filename")
-        row["file_name"] = name
-        row["transcription"] = text
-        unique[name] = row
+            continue
+        unique[name] = {"file_name": name, "transcription": text}
+    if not unique:
+        raise ValueError("No usable FLEURS rows found")
     return list(unique.values())
-
 
 def download_hub_file(filename: str) -> Path:
     """Download a public FLEURS file with bounded retries and explicit revision."""
