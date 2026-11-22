@@ -171,7 +171,8 @@ def main() -> int:
         "raw_token_count", "timestamp_count", "raw_decoder_text_chars", "chunk_text_chars",
         "merged_text_chars", "final_text_chars", "chunk_merge_char_delta",
         "final_normalization_char_delta", "token_density_per_second", "decode_seconds",
-        "merge_input_tokens", "merge_keep_tokens", "merge_reject_tokens", "merge_fallback_tokens",\n        "merge_unaccounted_tokens", "merge_reject_token_chars", "merge_boundary_rejections",
+        "merge_input_tokens", "merge_keep_tokens", "merge_reject_tokens", "merge_fallback_tokens",
+        "merge_unaccounted_tokens", "merge_reject_token_chars", "merge_boundary_rejections",
     ]
     args.output_tsv.parent.mkdir(parents=True, exist_ok=True)
     with args.output_tsv.open("w", encoding="utf-8", newline="") as f:
@@ -274,7 +275,13 @@ def main() -> int:
                 "final_normalization_char_delta": final_normalization_char_delta,
                 "token_density_per_second": f"{token_density:.6f}",
                 "decode_seconds": f"{decode_seconds:.6f}",
-                "merge_input_tokens": merge_diagnostics.get("input_tokens", 0),\n                "merge_keep_tokens": merge_diagnostics.get("keep_tokens", 0),\n                "merge_reject_tokens": merge_diagnostics.get("reject_tokens", 0),\n                "merge_fallback_tokens": merge_diagnostics.get("fallback_tokens", 0),\n                "merge_unaccounted_tokens": merge_diagnostics.get("unaccounted_tokens", 0),\n                "merge_reject_token_chars": merge_diagnostics.get("reject_token_chars", 0),\n                "merge_boundary_rejections": json.dumps(merge_diagnostics.get("boundary_rejections", []), separators=(",", ":")),
+                "merge_input_tokens": merge_diagnostics.get("input_tokens", 0),
+                "merge_keep_tokens": merge_diagnostics.get("keep_tokens", 0),
+                "merge_reject_tokens": merge_diagnostics.get("reject_tokens", 0),
+                "merge_fallback_tokens": merge_diagnostics.get("fallback_tokens", 0),
+                "merge_unaccounted_tokens": merge_diagnostics.get("unaccounted_tokens", 0),
+                "merge_reject_token_chars": merge_diagnostics.get("reject_token_chars", 0),
+                "merge_boundary_rejections": json.dumps(merge_diagnostics.get("boundary_rejections", []), separators=(",", ":")),
             })
     print(json.dumps({"decoded": len(entries), "output_tsv": str(args.output_tsv),
                       "normalization": {"target_rms_dbfs": args.normalize_rms_dbfs,
