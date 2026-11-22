@@ -129,29 +129,46 @@ def _audio_diagnostics(rows: list[dict[str, str]], mode: str) -> dict:
 
 
 def _stage_diagnostics(rows: list[dict[str, str]]) -> dict:
-    """Aggregate decoder-stage counts without exposing token or transcript content."""
-    required = ("raw_token_count", "timestamp_count", "decoded_text_chars",
-                "final_text_chars", "token_density_per_second", "decode_seconds")
-    if any(any(row.get(key) in (None, "") for key in required) for row in rows):
-        return {}
+    """Aggregate stage boundaries and signed character deltas without text content."""
+    required = (
+        "raw_token_count", "timestamp_count", "raw_decoder_text_chars",
+        "chunk_text_chars", "merged_text_chars", "final_text_chars",
+        "chunk_merge_char_delta", "final_normalization_char_delta",
+        "token_density_per_second", "decode_seconds",
+    )
     totals = {key: 0.0 for key in required}
-    shorter = 0
+    shorter_after_merge = 0
+    shorter_after_normalization = 0
     timestamp_mismatch = 0
     for row in rows:
         for key in required:
-            value = _finite_float(row.get(key), key)
-            totals[key] += value
-        if float(row["final_text_chars"]) < float(row["decoded_text_chars"]):
-            shorter += 1
+            totals[key] += _finite_float(row.get(key), key, minimum=-1e12 if key.endswith("_delta") else 0.0)
+        if float(row["merged_text_chars"]) < float(row["chunk_text_chars"]):
+            shorter_after_merge += 1
+        if float(row["final_text_chars"]) < float(row["merged_text_chars"]):
+            shorter_after_normalization += 1
         if float(row["raw_token_count"]) != float(row["timestamp_count"]):
             timestamp_mismatch += 1
+        if int(float(row["chunk_merge_char_delta"])) != (
+            int(float(row["merged_text_chars"])) - int(float(row["chunk_text_chars"]))
+        ):
+            raise ValueError("chunk merge character delta is inconsistent")
+        if int(float(row["final_normalization_char_delta"])) != (
+            int(float(row["final_text_chars"])) - int(float(row["merged_text_chars"]))
+        ):
+            raise ValueError("final normalization character delta is inconsistent")
     return {
         "decoder_stages": {
             "total_raw_tokens": int(totals["raw_token_count"]),
             "total_timestamps": int(totals["timestamp_count"]),
-            "total_decoded_text_chars": int(totals["decoded_text_chars"]),
+            "total_raw_decoder_text_chars": int(totals["raw_decoder_text_chars"]),
+            "total_chunk_text_chars": int(totals["chunk_text_chars"]),
+            "total_merged_text_chars": int(totals["merged_text_chars"]),
             "total_final_text_chars": int(totals["final_text_chars"]),
-            "cases_final_shorter_than_decoded": shorter,
+            "chunk_merge_char_delta": int(totals["chunk_merge_char_delta"]),
+            "final_normalization_char_delta": int(totals["final_normalization_char_delta"]),
+            "cases_shorter_after_merge": shorter_after_merge,
+            "cases_shorter_after_normalization": shorter_after_normalization,
             "cases_token_timestamp_count_mismatch": timestamp_mismatch,
             "mean_token_density_per_second": totals["token_density_per_second"] / len(rows),
             "total_decode_seconds": totals["decode_seconds"],
