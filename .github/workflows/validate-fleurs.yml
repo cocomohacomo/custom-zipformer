@@ -67,7 +67,7 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_download_fleurs_subset.py' -v
       - name: Validate inference syntax and timestamp merge diagnostics
         run: |
-          python -m py_compile scripts/run_sherpa_zipformer.py scripts/audio_chunking.py
+          python -m py_compile scripts/run_sherpa_zipformer.py scripts/audio_chunking.py scripts/validate_asr_evaluation.py scripts/sanitize_asr_report.py
           python -m unittest discover -s tests -p 'test_audio_chunking.py' -v
       - name: Download deterministic FLEURS Japanese subset
         run: |
