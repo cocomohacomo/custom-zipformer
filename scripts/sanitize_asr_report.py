@@ -226,6 +226,21 @@ def sanitize_execution_diagnostics(report: dict) -> dict:
                             if tokens is not None and chars is not None:
                                 clean_detail[key] = {"rejected_tokens": tokens, "rejected_token_chars": chars}
                 clean["merge_accounting"]["boundary_rejections_by_side_and_distance"] = clean_detail
+                raw_correspondence = accounting.get("boundary_rejection_correspondence")
+                clean_correspondence = {}
+                allowed_statuses = ("matched_unique", "matched_ambiguous", "unmatched")
+                if isinstance(raw_correspondence, dict):
+                    for key, value in sorted(raw_correspondence.items()):
+                        parts = key.split("|") if isinstance(key, str) else []
+                        if (len(parts) == 3
+                                and parts[0] in ("after_seam_from_left_chunk", "before_seam_from_right_chunk")
+                                and parts[1] in ("lt_100ms", "100_250ms", "250_500ms", "gte_500ms")
+                                and parts[2] in allowed_statuses and isinstance(value, dict)):
+                            tokens = _number(value.get("rejected_tokens"), integer=True, nonnegative=True)
+                            chars = _number(value.get("rejected_token_chars"), integer=True, nonnegative=True)
+                            if tokens is not None and chars is not None:
+                                clean_correspondence[key] = {"rejected_tokens": tokens, "rejected_token_chars": chars}
+                clean["merge_accounting"]["boundary_rejection_correspondence"] = clean_correspondence
         output[mode] = clean
     return output
 
