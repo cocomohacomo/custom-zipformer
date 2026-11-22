@@ -129,9 +129,9 @@ class ZipformerInferenceSourceTests(unittest.TestCase):
             def create_stream(self):
                 return FakeStream()
             def decode_stream(self, stream):
-                stream.result = types.SimpleNamespace(text="  raw output\\n", tokens=["a"], timestamps=[0.1])
+                stream.result = types.SimpleNamespace(text="  raw output\n", tokens=["a"], timestamps=[0.1])
         results, _ = decode_audio_chunks(FakeRecognizer(), [np.ones(16000)])
-        self.assertEqual(results[0]["raw_text"], "  raw output\\n")
+        self.assertEqual(results[0]["raw_text"], "  raw output\n")
         self.assertEqual(results[0]["text"], "raw output")
         self.assertEqual(len(results[0]["tokens"]), 1)
         self.assertEqual(len(results[0]["timestamps"]), 1)
