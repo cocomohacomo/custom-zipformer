@@ -18,7 +18,7 @@ class MergeAccountingTests(unittest.TestCase):
             "merge_keep_token_chars": "3", "merge_reject_token_chars": "2",
             "merge_boundary_rejections": '[{"chunk_position":0,"rejected_tokens":1,"rejected_token_chars":1}]',
             "merge_boundary_rejection_detail": '[{"side":"after_seam_from_left_chunk","distance_bucket":"lt_100ms","rejected_tokens":2,"rejected_token_chars":2}]',
-            "merge_boundary_rejection_correspondence": '[{"side":"after_seam_from_left_chunk","distance_bucket":"lt_100ms","status":"unmatched","rejected_tokens":2,"rejected_token_chars":2}]',
+            "merge_boundary_rejection_correspondence": '[{"side":"after_seam_from_left_chunk","distance_bucket":"lt_100ms","status":"unmatched_no_candidate","rejected_tokens":2,"rejected_token_chars":2}]',
         }
         value.update(overrides)
         return value
@@ -85,10 +85,34 @@ class MergeAccountingTests(unittest.TestCase):
         self.assertEqual(rows[("after_seam_from_left_chunk", "100_250ms", "matched_unique")]["rejected_tokens"], 1)
         self.assertEqual(sum(x["rejected_tokens"] for x in diag["boundary_rejection_correspondence"]), diag["reject_tokens"])
 
+
+    def test_correspondence_separates_assignment_conflict_from_no_candidate(self):
+        chunks = [
+            {"text": "XX", "tokens": ["X", "X"], "timestamps": [1.60, 1.70]},
+            {"text": "Xb", "tokens": ["X", "b"], "timestamps": [0.65, 1.50]},
+        ]
+        _, method, diag = diagnose_timestamped_chunk_merge(chunks, [0.0, 1.0], [2.0, 2.0])
+        self.assertEqual(method, "timestamp")
+        counts = {x["status"]: x["rejected_tokens"] for x in diag["boundary_rejection_correspondence"]}
+        self.assertEqual(counts["matched_unique"], 1)
+        self.assertEqual(counts["unmatched_conflict"], 1)
+        self.assertNotIn("unmatched_no_candidate", counts)
+
+    def test_correspondence_rejects_same_token_outside_250ms_window(self):
+        chunks = [
+            {"text": "aX", "tokens": ["a", "X"], "timestamps": [0.5, 1.70]},
+            {"text": "Xb", "tokens": ["X", "b"], "timestamps": [1.00, 1.50]},
+        ]
+        _, method, diag = diagnose_timestamped_chunk_merge(chunks, [0.0, 1.0], [2.0, 2.0])
+        self.assertEqual(method, "timestamp")
+        statuses = {x["status"]: x["rejected_tokens"] for x in diag["boundary_rejection_correspondence"]}
+        self.assertEqual(statuses["unmatched_no_candidate"], 1)
+        self.assertNotIn("matched_unique", statuses)
+
     def test_correspondence_aggregation_reconciles_and_rejects_mismatch(self):
         row = self.row()
         result = _merge_accounting_diagnostics([row])["merge_accounting"]
-        key = "after_seam_from_left_chunk|lt_100ms|unmatched"
+        key = "after_seam_from_left_chunk|lt_100ms|unmatched_no_candidate"
         self.assertEqual(result["boundary_rejection_correspondence"][key]["rejected_tokens"], 2)
         with self.assertRaisesRegex(ValueError, "does not reconcile"):
             _merge_accounting_diagnostics([self.row(merge_boundary_rejection_correspondence="[]")])
