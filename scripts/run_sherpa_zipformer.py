@@ -84,6 +84,23 @@ def decode_audio_chunks(recognizer, chunks):
     return results, durations
 
 
+def _merge_diagnostic_tsv_fields(diagnostics: dict) -> dict[str, object]:
+    """Map merge accounting diagnostics to the stable TSV schema."""
+    return {
+        "merge_input_tokens": diagnostics.get("input_tokens", 0),
+        "merge_keep_tokens": diagnostics.get("keep_tokens", 0),
+        "merge_reject_tokens": diagnostics.get("reject_tokens", 0),
+        "merge_fallback_tokens": diagnostics.get("fallback_tokens", 0),
+        "merge_unaccounted_tokens": diagnostics.get("unaccounted_tokens", 0),
+        "merge_input_token_chars": diagnostics.get("input_token_chars", 0),
+        "merge_keep_token_chars": diagnostics.get("keep_token_chars", 0),
+        "merge_reject_token_chars": diagnostics.get("reject_token_chars", 0),
+        "merge_boundary_rejections": json.dumps(
+            diagnostics.get("boundary_rejections", []), separators=(",", ":")
+        ),
+    }
+
+
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("manifest", type=Path)
@@ -276,15 +293,7 @@ def main() -> int:
                 "final_normalization_char_delta": final_normalization_char_delta,
                 "token_density_per_second": f"{token_density:.6f}",
                 "decode_seconds": f"{decode_seconds:.6f}",
-                "merge_input_tokens": merge_diagnostics.get("input_tokens", 0),
-                "merge_keep_tokens": merge_diagnostics.get("keep_tokens", 0),
-                "merge_reject_tokens": merge_diagnostics.get("reject_tokens", 0),
-                "merge_fallback_tokens": merge_diagnostics.get("fallback_tokens", 0),
-                "merge_unaccounted_tokens": merge_diagnostics.get("unaccounted_tokens", 0),
-                "merge_input_token_chars": merge_diagnostics.get("input_token_chars", 0),
-                "merge_keep_token_chars": merge_diagnostics.get("keep_token_chars", 0),
-                "merge_reject_token_chars": merge_diagnostics.get("reject_token_chars", 0),
-                "merge_boundary_rejections": json.dumps(merge_diagnostics.get("boundary_rejections", []), separators=(",", ":")),
+                **_merge_diagnostic_tsv_fields(merge_diagnostics),
             })
     print(json.dumps({"decoded": len(entries), "output_tsv": str(args.output_tsv),
                       "normalization": {"target_rms_dbfs": args.normalize_rms_dbfs,

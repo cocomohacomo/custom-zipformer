@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 
+from scripts.run_sherpa_zipformer import _merge_diagnostic_tsv_fields
 from scripts.validate_asr_evaluation import _merge_accounting_diagnostics
 from scripts.sanitize_asr_report import sanitize_execution_diagnostics
 
@@ -18,6 +19,18 @@ class MergeAccountingTests(unittest.TestCase):
         }
         value.update(overrides)
         return value
+
+    def test_runner_writes_all_token_character_accounting_columns(self):
+        fields = _merge_diagnostic_tsv_fields({
+            "input_tokens": 7, "keep_tokens": 4, "reject_tokens": 3,
+            "fallback_tokens": 0, "unaccounted_tokens": 0,
+            "input_token_chars": 12, "keep_token_chars": 7,
+            "reject_token_chars": 5, "boundary_rejections": [],
+        })
+        self.assertEqual(fields["merge_input_token_chars"], 12)
+        self.assertEqual(fields["merge_keep_token_chars"], 7)
+        self.assertEqual(fields["merge_reject_token_chars"], 5)
+        self.assertEqual(fields["merge_boundary_rejections"], "[]")
 
     def test_timestamp_accounting_and_boundary_aggregation(self):
         result = _merge_accounting_diagnostics([self.row(), self.row()])
