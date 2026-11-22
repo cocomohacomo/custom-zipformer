@@ -217,7 +217,14 @@ def main() -> int:
                 )
             else:
                 hypothesis = "".join(chunk_texts)
+            decoded_text = hypothesis
             hypothesis = hypothesis.replace("\t", " ").replace("\r", " ").replace("\n", " ").strip()
+            raw_token_count = sum(len(chunk.get("tokens", [])) for chunk in chunk_results)
+            timestamp_count = sum(len(chunk.get("timestamps", [])) for chunk in chunk_results)
+            decoded_text_chars = len(decoded_text)
+            final_text_chars = len(hypothesis)
+            decode_seconds = sum(float(chunk.get("decode_seconds", 0.0)) for chunk in chunk_results)
+            token_density = raw_token_count / duration if duration > 0 else 0.0
             reference = str(item["reference"]).replace("\t", " ").replace("\r", " ").replace("\n", " ").strip()
             writer.writerow({
                 "case_id": str(item["case_id"]), "category": str(item.get("category", "")),
@@ -238,6 +245,12 @@ def main() -> int:
                 "chunk_boundaries_seconds": ",".join(f"{v:.3f}" for v in boundaries),
                 "chunk_start_offsets_seconds": ",".join(f"{v:.3f}" for v in chunk_start_offsets),
                 "overlap_merge_method": overlap_merge_method,
+                "raw_token_count": raw_token_count,
+                "timestamp_count": timestamp_count,
+                "decoded_text_chars": decoded_text_chars,
+                "final_text_chars": final_text_chars,
+                "token_density_per_second": f"{token_density:.6f}",
+                "decode_seconds": f"{decode_seconds:.6f}",
             })
     print(json.dumps({"decoded": len(entries), "output_tsv": str(args.output_tsv),
                       "normalization": {"target_rms_dbfs": args.normalize_rms_dbfs,
