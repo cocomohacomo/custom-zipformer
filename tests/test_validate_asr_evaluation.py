@@ -30,7 +30,7 @@ class ValidateAsrEvaluationTests(unittest.TestCase):
                     "merge_input_tokens", "merge_keep_tokens", "merge_reject_tokens",
                     "merge_fallback_tokens", "merge_unaccounted_tokens",
                     "merge_input_token_chars", "merge_keep_token_chars", "merge_reject_token_chars",
-                    "merge_boundary_rejections", "merge_boundary_rejection_detail",
+                    "merge_boundary_rejections", "merge_boundary_rejection_detail", "merge_boundary_rejection_correspondence",
                 ], delimiter="\t")
                 writer.writeheader()
                 for index, case_id in enumerate(ids):
@@ -57,6 +57,7 @@ class ValidateAsrEvaluationTests(unittest.TestCase):
                         "merge_keep_token_chars": "8", "merge_reject_token_chars": "2",
                         "merge_boundary_rejections": '[{"chunk_position":0,"rejected_tokens":2,"rejected_token_chars":2}]',
                         "merge_boundary_rejection_detail": '[{"side":"after_seam_from_left_chunk","distance_bucket":"lt_100ms","rejected_tokens":2,"rejected_token_chars":2}]',
+                        "merge_boundary_rejection_correspondence": '[{"side":"after_seam_from_left_chunk","distance_bucket":"lt_100ms","status":"unmatched","rejected_tokens":2,"rejected_token_chars":2}]',
                     })
             report = {
                 "case_count": 2,
