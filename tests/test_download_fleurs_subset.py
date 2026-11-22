@@ -16,6 +16,18 @@ from scripts import download_fleurs_subset as fleurs
 
 
 class FleursSubsetTests(unittest.TestCase):
+    def test_read_rows_supports_official_headerless_tsv(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "dev.tsv"
+            path.write_text(
+                "speaker_1\\tclip.wav\\tこんにちは\\tこんにちは\\tこ ん に ち は\\t16000\\n",
+                encoding="utf-8",
+            )
+            self.assertEqual(
+                fleurs.read_rows(path),
+                [{"file_name": "clip.wav", "transcription": "こんにちは"}],
+            )
+
     def test_classify(self):
         self.assertEqual(fleurs.classify("あ" * 30), "short")
         self.assertEqual(fleurs.classify("あ" * 31), "medium")
@@ -78,9 +90,11 @@ class FleursSubsetTests(unittest.TestCase):
                     source.write_bytes((name + "-audio").encode())
                     archive.add(source, arcname=f"audio/{name}")
 
-            def fake_download(*, repo_id, repo_type, filename):
+            def fake_download(*, repo_id, repo_type, filename, revision, etag_timeout):
                 self.assertEqual(repo_id, fleurs.REPO_ID)
                 self.assertEqual(repo_type, "dataset")
+                self.assertEqual(revision, "main")
+                self.assertEqual(etag_timeout, 60)
                 return str(tsv if filename == fleurs.TRANSCRIPT_FILE else archive_path)
 
             fake_module = SimpleNamespace(hf_hub_download=fake_download)
