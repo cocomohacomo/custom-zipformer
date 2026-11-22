@@ -39,6 +39,11 @@ class ValidateAsrEvaluationTests(unittest.TestCase):
                         "chunk_boundaries_seconds": "15.0" if mode == "silence_aware_15s" else "",
                         "chunk_start_offsets_seconds": "0.0,13.0" if mode == "overlap_2s" else "0.0",
                         "overlap_merge_method": "timestamp",
+                        "raw_token_count": "10", "timestamp_count": "10",
+                        "raw_decoder_text_chars": "14", "chunk_text_chars": "12",
+                        "merged_text_chars": "11", "final_text_chars": "10",
+                        "chunk_merge_char_delta": "-1", "final_normalization_char_delta": "-1",
+                        "token_density_per_second": "2", "decode_seconds": "0.1",
                     })
             report = {
                 "case_count": 2,
@@ -69,26 +74,39 @@ class ValidateAsrEvaluationTests(unittest.TestCase):
 
 
 
-    def test_stage_diagnostics_aggregates_and_detects_stage_loss(self):
+    def test_stage_diagnostics_aggregates_separated_stage_loss(self):
         rows = [
-            {"raw_token_count": "8", "timestamp_count": "8", "decoded_text_chars": "12",
-             "final_text_chars": "11", "token_density_per_second": "4.0", "decode_seconds": "0.2"},
-            {"raw_token_count": "4", "timestamp_count": "3", "decoded_text_chars": "5",
-             "final_text_chars": "5", "token_density_per_second": "2.0", "decode_seconds": "0.1"},
+            {"raw_token_count": "8", "timestamp_count": "8",
+             "raw_decoder_text_chars": "14", "chunk_text_chars": "12",
+             "merged_text_chars": "11", "final_text_chars": "10",
+             "chunk_merge_char_delta": "-1", "final_normalization_char_delta": "-1",
+             "token_density_per_second": "4.0", "decode_seconds": "0.2"},
+            {"raw_token_count": "4", "timestamp_count": "3",
+             "raw_decoder_text_chars": "6", "chunk_text_chars": "5",
+             "merged_text_chars": "5", "final_text_chars": "5",
+             "chunk_merge_char_delta": "0", "final_normalization_char_delta": "0",
+             "token_density_per_second": "2.0", "decode_seconds": "0.1"},
         ]
         result = _stage_diagnostics(rows)["decoder_stages"]
         self.assertEqual(result["total_raw_tokens"], 12)
         self.assertEqual(result["total_timestamps"], 11)
-        self.assertEqual(result["total_decoded_text_chars"], 17)
-        self.assertEqual(result["total_final_text_chars"], 16)
-        self.assertEqual(result["cases_final_shorter_than_decoded"], 1)
+        self.assertEqual(result["total_raw_decoder_text_chars"], 20)
+        self.assertEqual(result["total_chunk_text_chars"], 17)
+        self.assertEqual(result["total_merged_text_chars"], 16)
+        self.assertEqual(result["total_final_text_chars"], 15)
+        self.assertEqual(result["chunk_merge_char_delta"], -1)
+        self.assertEqual(result["final_normalization_char_delta"], -1)
+        self.assertEqual(result["cases_shorter_after_merge"], 1)
+        self.assertEqual(result["cases_shorter_after_normalization"], 1)
         self.assertEqual(result["cases_token_timestamp_count_mismatch"], 1)
         self.assertEqual(result["mean_token_density_per_second"], 3.0)
         self.assertAlmostEqual(result["total_decode_seconds"], 0.3)
 
     def test_stage_diagnostics_reject_invalid_numeric_values(self):
         rows = [{"raw_token_count": "NaN", "timestamp_count": "1",
-                 "decoded_text_chars": "1", "final_text_chars": "1",
+                 "raw_decoder_text_chars": "1", "chunk_text_chars": "1",
+                 "merged_text_chars": "1", "final_text_chars": "1",
+                 "chunk_merge_char_delta": "0", "final_normalization_char_delta": "0",
                  "token_density_per_second": "1", "decode_seconds": "1"}]
         with self.assertRaisesRegex(ValueError, "non-finite"):
             _stage_diagnostics(rows)
