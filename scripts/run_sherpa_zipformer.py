@@ -194,6 +194,7 @@ def main() -> int:
         "merge_input_tokens", "merge_keep_tokens", "merge_reject_tokens", "merge_fallback_tokens",
         "merge_unaccounted_tokens", "merge_input_token_chars", "merge_keep_token_chars",
         "merge_reject_token_chars", "merge_boundary_rejections",
+        "merge_boundary_rejection_detail",
     ]
     args.output_tsv.parent.mkdir(parents=True, exist_ok=True)
     with args.output_tsv.open("w", encoding="utf-8", newline="") as f:
