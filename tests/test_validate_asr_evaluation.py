@@ -27,6 +27,10 @@ class ValidateAsrEvaluationTests(unittest.TestCase):
                     "raw_token_count", "timestamp_count", "raw_decoder_text_chars", "chunk_text_chars",
                     "merged_text_chars", "final_text_chars", "chunk_merge_char_delta",
                     "final_normalization_char_delta", "token_density_per_second", "decode_seconds",
+                    "merge_input_tokens", "merge_keep_tokens", "merge_reject_tokens",
+                    "merge_fallback_tokens", "merge_unaccounted_tokens",
+                    "merge_input_token_chars", "merge_keep_token_chars", "merge_reject_token_chars",
+                    "merge_boundary_rejections", "merge_boundary_rejection_detail",
                 ], delimiter="\t")
                 writer.writeheader()
                 for index, case_id in enumerate(ids):
@@ -47,6 +51,12 @@ class ValidateAsrEvaluationTests(unittest.TestCase):
                         "merged_text_chars": "11", "final_text_chars": "10",
                         "chunk_merge_char_delta": "-1", "final_normalization_char_delta": "-1",
                         "token_density_per_second": "2", "decode_seconds": "0.1",
+                        "merge_input_tokens": "10", "merge_keep_tokens": "8",
+                        "merge_reject_tokens": "2", "merge_fallback_tokens": "0",
+                        "merge_unaccounted_tokens": "0", "merge_input_token_chars": "10",
+                        "merge_keep_token_chars": "8", "merge_reject_token_chars": "2",
+                        "merge_boundary_rejections": '[{"chunk_position":0,"rejected_tokens":2,"rejected_token_chars":2}]',
+                        "merge_boundary_rejection_detail": '[{"side":"after_seam_from_left_chunk","distance_bucket":"lt_100ms","rejected_tokens":2,"rejected_token_chars":2}]',
                     })
             report = {
                 "case_count": 2,

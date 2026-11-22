@@ -169,7 +169,7 @@ class SanitizeAsrReportTests(unittest.TestCase):
         for dataset in ("jsut", "fleurs"):
             with self.subTest(dataset=dataset):
                 source = (root / "scripts" / f"download_{dataset}_subset.py").read_text(encoding="utf-8")
-                self.assertIn("detailed source information is suppressed", source)
+                self.assertIn(f"{dataset.upper()} dataset preparation failed", source)
                 self.assertIn("except Exception:", source)
 
 
