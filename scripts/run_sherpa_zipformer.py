@@ -5,6 +5,7 @@ import argparse
 import csv
 import json
 import sys
+import time
 from pathlib import Path
 
 
@@ -64,12 +65,18 @@ def decode_audio_chunks(recognizer, chunks):
         stream = recognizer.create_stream()
         stream.accept_waveform(16000, chunk)
         # OfflineRecognizer.decode_stream() completes the supplied waveform.
+        decode_started = time.perf_counter()
         recognizer.decode_stream(stream)
+        decode_seconds = time.perf_counter() - decode_started
         result = stream.result
+        decoded_text = result.text.strip()
+        tokens = list(getattr(result, "tokens", []) or [])
+        timestamps = list(getattr(result, "timestamps", []) or [])
         results.append({
-            "text": result.text.strip(),
-            "tokens": list(getattr(result, "tokens", []) or []),
-            "timestamps": list(getattr(result, "timestamps", []) or []),
+            "text": decoded_text,
+            "tokens": tokens,
+            "timestamps": timestamps,
+            "decode_seconds": decode_seconds,
         })
         durations.append(float(len(chunk) / 16000))
     return results, durations
@@ -150,6 +157,7 @@ def main() -> int:
         "audio_duration_seconds", "audio_rms", "audio_peak",
         "near_silence_fraction", "clipping_fraction",
         "source_sample_rate", "source_channels", "applied_gain_db", "inference_audio_rms", "inference_chunks", "inference_empty_chunks", "inference_short_chunks_lt_25ms", "inference_silent_chunks", "chunk_boundaries_seconds", "chunk_start_offsets_seconds", "overlap_merge_method",
+        "raw_token_count", "timestamp_count", "decoded_text_chars", "final_text_chars", "token_density_per_second", "decode_seconds",
     ]
     args.output_tsv.parent.mkdir(parents=True, exist_ok=True)
     with args.output_tsv.open("w", encoding="utf-8", newline="") as f:
