@@ -62,7 +62,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install FLEURS downloader and inference dependencies
-        run: python -m pip install --upgrade pip huggingface_hub sherpa-onnx soundfile scipy numpy
+        run: python -m pip install --upgrade pip 'huggingface_hub==0.36.2' sherpa-onnx soundfile scipy numpy
       - name: Download deterministic FLEURS Japanese subset
         run: |
           python scripts/download_fleurs_subset.py --limit "${{ inputs.sample_limit }}" --output tests/data/fleurs_ja
