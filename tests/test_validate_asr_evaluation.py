@@ -24,6 +24,9 @@ class ValidateAsrEvaluationTests(unittest.TestCase):
                     "case_id", "reference", "hypothesis", "audio_duration_seconds", "inference_chunks",
                     "inference_empty_chunks", "inference_short_chunks_lt_25ms", "inference_silent_chunks",
                     "chunk_boundaries_seconds", "chunk_start_offsets_seconds", "overlap_merge_method",
+                    "raw_token_count", "timestamp_count", "raw_decoder_text_chars", "chunk_text_chars",
+                    "merged_text_chars", "final_text_chars", "chunk_merge_char_delta",
+                    "final_normalization_char_delta", "token_density_per_second", "decode_seconds",
                 ], delimiter="\t")
                 writer.writeheader()
                 for index, case_id in enumerate(ids):
