@@ -69,11 +69,12 @@ def decode_audio_chunks(recognizer, chunks):
         recognizer.decode_stream(stream)
         decode_seconds = time.perf_counter() - decode_started
         result = stream.result
-        decoded_text = result.text.strip()
+        raw_text = str(getattr(result, "text", "") or "")
         tokens = list(getattr(result, "tokens", []) or [])
         timestamps = list(getattr(result, "timestamps", []) or [])
         results.append({
-            "text": decoded_text,
+            "raw_text": raw_text,
+            "text": raw_text.strip(),
             "tokens": tokens,
             "timestamps": timestamps,
             "decode_seconds": decode_seconds,
@@ -157,7 +158,9 @@ def main() -> int:
         "audio_duration_seconds", "audio_rms", "audio_peak",
         "near_silence_fraction", "clipping_fraction",
         "source_sample_rate", "source_channels", "applied_gain_db", "inference_audio_rms", "inference_chunks", "inference_empty_chunks", "inference_short_chunks_lt_25ms", "inference_silent_chunks", "chunk_boundaries_seconds", "chunk_start_offsets_seconds", "overlap_merge_method",
-        "raw_token_count", "timestamp_count", "decoded_text_chars", "final_text_chars", "token_density_per_second", "decode_seconds",
+        "raw_token_count", "timestamp_count", "raw_decoder_text_chars", "chunk_text_chars",
+        "merged_text_chars", "final_text_chars", "chunk_merge_char_delta",
+        "final_normalization_char_delta", "token_density_per_second", "decode_seconds",
     ]
     args.output_tsv.parent.mkdir(parents=True, exist_ok=True)
     with args.output_tsv.open("w", encoding="utf-8", newline="") as f:
@@ -217,12 +220,16 @@ def main() -> int:
                 )
             else:
                 hypothesis = "".join(chunk_texts)
-            decoded_text = hypothesis
+            merged_text = hypothesis
             hypothesis = hypothesis.replace("\t", " ").replace("\r", " ").replace("\n", " ").strip()
             raw_token_count = sum(len(chunk.get("tokens", [])) for chunk in chunk_results)
             timestamp_count = sum(len(chunk.get("timestamps", [])) for chunk in chunk_results)
-            decoded_text_chars = len(decoded_text)
+            raw_decoder_text_chars = sum(len(chunk.get("raw_text", "")) for chunk in chunk_results)
+            chunk_text_chars = sum(len(chunk.get("text", "")) for chunk in chunk_results)
+            merged_text_chars = len(merged_text)
             final_text_chars = len(hypothesis)
+            chunk_merge_char_delta = merged_text_chars - chunk_text_chars
+            final_normalization_char_delta = final_text_chars - merged_text_chars
             decode_seconds = sum(float(chunk.get("decode_seconds", 0.0)) for chunk in chunk_results)
             token_density = raw_token_count / duration if duration > 0 else 0.0
             reference = str(item["reference"]).replace("\t", " ").replace("\r", " ").replace("\n", " ").strip()
@@ -247,8 +254,12 @@ def main() -> int:
                 "overlap_merge_method": overlap_merge_method,
                 "raw_token_count": raw_token_count,
                 "timestamp_count": timestamp_count,
-                "decoded_text_chars": decoded_text_chars,
+                "raw_decoder_text_chars": raw_decoder_text_chars,
+                "chunk_text_chars": chunk_text_chars,
+                "merged_text_chars": merged_text_chars,
                 "final_text_chars": final_text_chars,
+                "chunk_merge_char_delta": chunk_merge_char_delta,
+                "final_normalization_char_delta": final_normalization_char_delta,
                 "token_density_per_second": f"{token_density:.6f}",
                 "decode_seconds": f"{decode_seconds:.6f}",
             })
