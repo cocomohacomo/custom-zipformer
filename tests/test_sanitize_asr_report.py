@@ -311,6 +311,27 @@ class SanitizeAsrReportTests(unittest.TestCase):
         self.assertNotIn("row['case_id']", workflow)
 
 
+    def test_decoder_stage_diagnostics_are_allowlisted_and_aggregate_only(self):
+        safe = sanitize_execution_diagnostics({"modes": {"whole": {
+            "case_count": 2,
+            "audio_duration_seconds": {"min": 1, "median": 2, "max": 3},
+            "chunking": {"single_chunk_cases": 2, "multi_chunk_cases": 0,
+                "multi_chunk_case_rate": 0, "total_chunks": 2, "max_chunks_per_case": 1,
+                "short_chunks_lt_25ms": 0, "silent_chunks": 0, "empty_output_chunks": 0,
+                "empty_output_chunk_rate": 0},
+            "decoder_stages": {"total_raw_tokens": 10, "total_timestamps": 10,
+                "total_decoded_text_chars": 20, "total_final_text_chars": 19,
+                "cases_final_shorter_than_decoded": 1,
+                "cases_token_timestamp_count_mismatch": 0,
+                "mean_token_density_per_second": 5, "total_decode_seconds": 0.25,
+                "private_tokens": ["secret"], "transcript": "secret text"}
+        }}})
+        stages = safe["whole"]["decoder_stages"]
+        self.assertEqual(stages["total_raw_tokens"], 10)
+        self.assertEqual(stages["cases_final_shorter_than_decoded"], 1)
+        self.assertNotIn("private_tokens", stages)
+        self.assertNotIn("transcript", stages)
+
     def test_silence_aware_comparison_alias_is_exported_canonically(self):
         safe = sanitize_comparisons({
             "paired_comparisons": {
