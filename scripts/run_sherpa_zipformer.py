@@ -223,9 +223,10 @@ def main() -> int:
             chunk_results, chunk_durations = decode_audio_chunks(recognizer, chunks)
             chunk_texts = [item["text"] for item in chunk_results]
             overlap_merge_method = "not_applicable"
+            merge_diagnostics = {}
             if args.chunk_overlap_seconds > 0:
-                from audio_chunking import merge_timestamped_chunks
-                hypothesis, overlap_merge_method = merge_timestamped_chunks(
+                from audio_chunking import diagnose_timestamped_chunk_merge
+                hypothesis, overlap_merge_method, merge_diagnostics = diagnose_timestamped_chunk_merge(
                     chunk_results, chunk_start_offsets, chunk_durations
                 )
             else:
