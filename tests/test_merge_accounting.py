@@ -16,6 +16,7 @@ class MergeAccountingTests(unittest.TestCase):
             "merge_unaccounted_tokens": "0", "merge_input_token_chars": "5",
             "merge_keep_token_chars": "3", "merge_reject_token_chars": "2",
             "merge_boundary_rejections": '[{"chunk_position":0,"rejected_tokens":1,"rejected_token_chars":1}]',
+            "merge_boundary_rejection_detail": '[{"side":"after_seam_from_left_chunk","distance_bucket":"lt_100ms","rejected_tokens":1,"rejected_token_chars":1}]',
         }
         value.update(overrides)
         return value
@@ -25,12 +26,13 @@ class MergeAccountingTests(unittest.TestCase):
             "input_tokens": 7, "keep_tokens": 4, "reject_tokens": 3,
             "fallback_tokens": 0, "unaccounted_tokens": 0,
             "input_token_chars": 12, "keep_token_chars": 7,
-            "reject_token_chars": 5, "boundary_rejections": [],
+            "reject_token_chars": 5, "boundary_rejections": [], "boundary_rejection_detail": [],
         })
         self.assertEqual(fields["merge_input_token_chars"], 12)
         self.assertEqual(fields["merge_keep_token_chars"], 7)
         self.assertEqual(fields["merge_reject_token_chars"], 5)
         self.assertEqual(fields["merge_boundary_rejections"], "[]")
+        self.assertEqual(fields["merge_boundary_rejection_detail"], "[]")
 
     def test_timestamp_accounting_and_boundary_aggregation(self):
         result = _merge_accounting_diagnostics([self.row(), self.row()])
@@ -56,6 +58,17 @@ class MergeAccountingTests(unittest.TestCase):
         self.assertEqual(result["fallback_tokens"], 5)
         self.assertEqual(result["keep_tokens"] + result["reject_tokens"], 0)
 
+    def test_boundary_rejection_side_and_distance_are_aggregated(self):
+        chunks = [
+            {"text": "ab", "tokens": ["a", "b"], "timestamps": [0.8, 1.6]},
+            {"text": "cd", "tokens": ["c", "d"], "timestamps": [0.1, 0.9]},
+        ]
+        _, method, diag = diagnose_timestamped_chunk_merge(chunks, [0.0, 1.0], [2.0, 2.0])
+        self.assertEqual(method, "timestamp")
+        detail = {(item["side"], item["distance_bucket"]): item for item in diag["boundary_rejection_detail"]}
+        self.assertEqual(detail[("after_seam_from_left_chunk", "100_250ms")]["rejected_tokens"], 1)
+        self.assertEqual(detail[("before_seam_from_right_chunk", "250_500ms")]["rejected_tokens"], 1)
+
     def test_sanitizer_keeps_only_aggregate_accounting(self):
         source = {"modes": {"overlap_2s": {
             "audio_duration_seconds": {"min": 1.0, "median": 2.0, "max": 3.0},
@@ -70,11 +83,14 @@ class MergeAccountingTests(unittest.TestCase):
                 "fallback_cases": 0, "unaccounted_tokens": 0,
                 "accounting_consistent": True,
                 "boundary_rejections_by_chunk": {"chunk_0": {"rejected_tokens": 2, "rejected_token_chars": 2}},
+                "boundary_rejections_by_side_and_distance": {
+                    "after_seam_from_left_chunk|lt_100ms": {"rejected_tokens": 1, "rejected_token_chars": 1}},
                 "private_case_id": "MUST_NOT_LEAK"}}}}
         clean = sanitize_execution_diagnostics(source)
         rendered = str(clean)
         self.assertIn("merge_accounting", rendered)
         self.assertNotIn("MUST_NOT_LEAK", rendered)
+        self.assertIn("boundary_rejections_by_side_and_distance", rendered)
 
 
 if __name__ == "__main__":

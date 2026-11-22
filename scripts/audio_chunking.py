@@ -217,12 +217,16 @@ def diagnose_timestamped_chunk_merge(chunk_results, chunk_start_seconds, chunk_d
     )
     kept = rejected = kept_chars = rejected_chars = 0
     boundary_counts = []
+    rejection_detail = []
+    distance_edges = (0.10, 0.25, 0.50)
+    distance_labels = ("lt_100ms", "100_250ms", "250_500ms", "gte_500ms")
     if method == "timestamp":
         n = len(chunk_results)
         starts = [float(v) for v in chunk_start_seconds]
         durations = [float(v) for v in chunk_durations_seconds]
         lower = [float("-inf")] * n
         upper = [float("inf")] * n
+        seams = [None] * n
         for i in range(n - 1):
             previous_end = starts[i] + durations[i]
             next_start = starts[i + 1]
@@ -230,11 +234,15 @@ def diagnose_timestamped_chunk_merge(chunk_results, chunk_start_seconds, chunk_d
                 seam = (next_start + previous_end) / 2.0
                 upper[i] = seam
                 lower[i + 1] = seam
+                seams[i] = seam
+                seams[i + 1] = seam
+        detail_counts = {}
         for i, item in enumerate(chunk_results):
             local_rejected = local_rejected_chars = 0
             for token, timestamp in zip(item.get("tokens") or [], item.get("timestamps") or []):
                 rendered = str(token).replace("▁", " ")
-                if lower[i] <= starts[i] + float(timestamp) < upper[i]:
+                absolute_time = starts[i] + float(timestamp)
+                if lower[i] <= absolute_time < upper[i]:
                     kept += 1
                     kept_chars += len(rendered)
                 else:
@@ -242,12 +250,27 @@ def diagnose_timestamped_chunk_merge(chunk_results, chunk_start_seconds, chunk_d
                     rejected_chars += len(rendered)
                     local_rejected += 1
                     local_rejected_chars += len(rendered)
+                    seam = seams[i]
+                    if seam is not None:
+                        side = ("after_seam_from_left_chunk" if absolute_time >= upper[i]
+                                else "before_seam_from_right_chunk")
+                        distance = abs(absolute_time - seam)
+                        bucket_index = next((j for j, edge in enumerate(distance_edges) if distance < edge), len(distance_edges))
+                        key = (side, distance_labels[bucket_index])
+                        counts = detail_counts.setdefault(key, [0, 0])
+                        counts[0] += 1
+                        counts[1] += len(rendered)
             if local_rejected:
                 boundary_counts.append({
                     "chunk_position": i,
                     "rejected_tokens": local_rejected,
                     "rejected_token_chars": local_rejected_chars,
                 })
+        rejection_detail = [
+            {"side": side, "distance_bucket": bucket, "rejected_tokens": counts[0],
+             "rejected_token_chars": counts[1]}
+            for (side, bucket), counts in sorted(detail_counts.items())
+        ]
     return merged, method, {
         "input_tokens": input_count,
         "keep_tokens": kept,
@@ -262,4 +285,5 @@ def diagnose_timestamped_chunk_merge(chunk_results, chunk_start_seconds, chunk_d
         ),
         "accounting_applicable": method == "timestamp",
         "boundary_rejections": boundary_counts,
+        "boundary_rejection_detail": rejection_detail,
     }

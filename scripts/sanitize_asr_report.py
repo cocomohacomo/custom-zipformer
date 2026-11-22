@@ -211,6 +211,21 @@ def sanitize_execution_diagnostics(report: dict) -> dict:
                             clean_boundaries[name] = {"rejected_tokens": tokens, "rejected_token_chars": chars}
             if all(value is not None for value in values.values()) and accounting.get("accounting_consistent") is True and values["unaccounted_tokens"] == 0:
                 clean["merge_accounting"] = {**values, "accounting_consistent": True, "boundary_rejections_by_chunk": clean_boundaries}
+                raw_detail = accounting.get("boundary_rejections_by_side_and_distance")
+                clean_detail = {}
+                if isinstance(raw_detail, dict):
+                    allowed_detail_keys = {
+                        side + "|" + distance
+                        for side in ("after_seam_from_left_chunk", "before_seam_from_right_chunk")
+                        for distance in ("lt_100ms", "100_250ms", "250_500ms", "gte_500ms")
+                    }
+                    for key, value in sorted(raw_detail.items()):
+                        if key in allowed_detail_keys and isinstance(value, dict):
+                            tokens = _number(value.get("rejected_tokens"), integer=True, nonnegative=True)
+                            chars = _number(value.get("rejected_token_chars"), integer=True, nonnegative=True)
+                            if tokens is not None and chars is not None:
+                                clean_detail[key] = {"rejected_tokens": tokens, "rejected_token_chars": chars}
+                clean["merge_accounting"]["boundary_rejections_by_side_and_distance"] = clean_detail
         output[mode] = clean
     return output
 

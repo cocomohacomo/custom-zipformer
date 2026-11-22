@@ -98,6 +98,9 @@ def _merge_diagnostic_tsv_fields(diagnostics: dict) -> dict[str, object]:
         "merge_boundary_rejections": json.dumps(
             diagnostics.get("boundary_rejections", []), separators=(",", ":")
         ),
+        "merge_boundary_rejection_detail": json.dumps(
+            diagnostics.get("boundary_rejection_detail", []), separators=(",", ":")
+        ),
     }
 
 
