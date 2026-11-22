@@ -7,8 +7,10 @@ this script never commits or uploads audio.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import csv
 import hashlib
+import io
 import json
 import random
 import shutil
@@ -18,7 +20,7 @@ from pathlib import Path
 
 REPO_ID = "google/fleurs"
 SPLIT = "dev"
-BASE = f"data/ja_jp"
+BASE = "data/ja_jp"
 TRANSCRIPT_FILE = f"{BASE}/{SPLIT}.tsv"
 AUDIO_ARCHIVE = f"{BASE}/audio/{SPLIT}.tar.gz"
 
@@ -43,7 +45,7 @@ def sha256(path: Path) -> str:
 def read_rows(path: Path) -> list[dict[str, str]]:
     """Read official FLEURS TSV (headerless) and compatible named-column TSVs."""
     with path.open(encoding="utf-8", newline="") as stream:
-        raw_rows = list(csv.reader(stream, delimiter="\t"))
+        raw_rows = list(csv.reader(stream, delimiter="\\t"))
     if not raw_rows:
         raise ValueError("FLEURS TSV is empty")
 
@@ -57,8 +59,6 @@ def read_rows(path: Path) -> list[dict[str, str]]:
         text_index = header.index("transcription")
         data_rows = raw_rows[1:]
     else:
-        # Official google/fleurs data/ja_jp/{split}.tsv is headerless:
-        # speaker_id, filename, transcription, normalized, ...
         if len(raw_rows[0]) < 3:
             raise ValueError("FLEURS TSV has fewer than three columns")
         file_index, text_index = 1, 2
@@ -78,6 +78,7 @@ def read_rows(path: Path) -> list[dict[str, str]]:
     if not unique:
         raise ValueError("No usable FLEURS rows found")
     return list(unique.values())
+
 
 def download_hub_file(filename: str) -> Path:
     """Download a public FLEURS file with bounded retries and explicit revision."""
@@ -113,9 +114,7 @@ def prepare_dataset(limit: int, output: Path, seed: int = 270021) -> dict:
 
     transcript_path = download_hub_file(TRANSCRIPT_FILE)
     rows = read_rows(transcript_path)
-    buckets: dict[str, list[dict[str, str]]] = {
-        "short": [], "medium": [], "long": []
-    }
+    buckets: dict[str, list[dict[str, str]]] = {"short": [], "medium": [], "long": []}
     for row in rows:
         buckets[classify(row["transcription"])].append(row)
     rng = random.Random(seed)
@@ -152,7 +151,7 @@ def prepare_dataset(limit: int, output: Path, seed: int = 270021) -> dict:
             if len(extracted) == len(wanted):
                 break
 
-    missing = sorted(wanted - extracted.keys())
+    missing = wanted - extracted.keys()
     if missing:
         raise ValueError(f"FLEURS archive is missing {len(missing)} selected files")
 
@@ -190,7 +189,7 @@ def prepare_dataset(limit: int, output: Path, seed: int = 270021) -> dict:
     }
     output.mkdir(parents=True, exist_ok=True)
     (output / "manifest.json").write_text(
-        json.dumps(metadata, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        json.dumps(metadata, ensure_ascii=False, indent=2) + "\\n", encoding="utf-8"
     )
     return metadata
 
@@ -204,10 +203,11 @@ def main() -> int:
     if args.limit < 1 or args.limit > 500:
         parser.error("--limit must be between 1 and 500")
     try:
-        metadata = prepare_dataset(args.limit, args.output, args.seed)
+        # Third-party download libraries may print paths, IDs, or signed URLs.
+        # Keep both streams private and emit only sanitized exception classes.
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            metadata = prepare_dataset(args.limit, args.output, args.seed)
     except Exception as exc:
-        # Report only exception classes. Never print paths, utterance IDs,
-        # transcript text, signed URLs, or request headers.
         root_cause = exc.__cause__ or exc
         print(
             "FLEURS dataset preparation failed "
