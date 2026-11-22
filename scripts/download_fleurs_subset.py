@@ -45,7 +45,7 @@ def sha256(path: Path) -> str:
 def read_rows(path: Path) -> list[dict[str, str]]:
     """Read official FLEURS TSV (headerless) and compatible named-column TSVs."""
     with path.open(encoding="utf-8", newline="") as stream:
-        raw_rows = list(csv.reader(stream, delimiter="\\t"))
+        raw_rows = list(csv.reader(stream, delimiter="\t"))
     if not raw_rows:
         raise ValueError("FLEURS TSV is empty")
 
@@ -189,7 +189,7 @@ def prepare_dataset(limit: int, output: Path, seed: int = 270021) -> dict:
     }
     output.mkdir(parents=True, exist_ok=True)
     (output / "manifest.json").write_text(
-        json.dumps(metadata, ensure_ascii=False, indent=2) + "\\n", encoding="utf-8"
+        json.dumps(metadata, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
     return metadata
 
