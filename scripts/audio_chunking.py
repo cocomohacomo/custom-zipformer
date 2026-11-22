@@ -331,5 +331,6 @@ def diagnose_timestamped_chunk_merge(chunk_results, chunk_start_seconds, chunk_d
         ),
         "accounting_applicable": method == "timestamp",
         "boundary_rejections": boundary_counts,
-        "boundary_rejection_detail": rejection_detail,\n        "boundary_rejection_correspondence": correspondence_detail if method == "timestamp" else [],
+        "boundary_rejection_detail": rejection_detail,
+        "boundary_rejection_correspondence": correspondence_detail if method == "timestamp" else [],
     }
