@@ -170,6 +170,25 @@ def sanitize_execution_diagnostics(report: dict) -> dict:
                 for key in ("timestamp", "text_fallback")
                 if _number(methods.get(key), integer=True, nonnegative=True) is not None
             }
+        stages = item.get("decoder_stages")
+        if isinstance(stages, dict):
+            stage_keys = (
+                "total_raw_tokens", "total_timestamps", "total_decoded_text_chars",
+                "total_final_text_chars", "cases_final_shorter_than_decoded",
+                "cases_token_timestamp_count_mismatch",
+            )
+            clean_stages = {
+                key: _number(stages.get(key), integer=True, nonnegative=True)
+                for key in stage_keys
+            }
+            clean_stages["mean_token_density_per_second"] = _number(
+                stages.get("mean_token_density_per_second"), nonnegative=True
+            )
+            clean_stages["total_decode_seconds"] = _number(
+                stages.get("total_decode_seconds"), nonnegative=True
+            )
+            if all(value is not None for value in clean_stages.values()):
+                clean["decoder_stages"] = clean_stages
         output[mode] = clean
     return output
 
