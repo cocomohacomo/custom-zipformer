@@ -170,7 +170,7 @@ class SanitizeAsrReportTests(unittest.TestCase):
             with self.subTest(dataset=dataset):
                 source = (root / "scripts" / f"download_{dataset}_subset.py").read_text(encoding="utf-8")
                 self.assertIn(f"{dataset.upper()} dataset preparation failed", source)
-                self.assertIn("except Exception:", source)
+                self.assertIn("except Exception", source)
 
 
     def test_dataset_workflows_upload_only_sanitized_aggregate_reports(self):

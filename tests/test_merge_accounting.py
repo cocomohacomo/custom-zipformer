@@ -17,7 +17,7 @@ class MergeAccountingTests(unittest.TestCase):
             "merge_unaccounted_tokens": "0", "merge_input_token_chars": "5",
             "merge_keep_token_chars": "3", "merge_reject_token_chars": "2",
             "merge_boundary_rejections": '[{"chunk_position":0,"rejected_tokens":1,"rejected_token_chars":1}]',
-            "merge_boundary_rejection_detail": '[{"side":"after_seam_from_left_chunk","distance_bucket":"lt_100ms","rejected_tokens":1,"rejected_token_chars":1}]',
+            "merge_boundary_rejection_detail": '[{"side":"after_seam_from_left_chunk","distance_bucket":"lt_100ms","rejected_tokens":2,"rejected_token_chars":2}]',
         }
         value.update(overrides)
         return value
@@ -61,7 +61,7 @@ class MergeAccountingTests(unittest.TestCase):
 
     def test_boundary_rejection_side_and_distance_are_aggregated(self):
         chunks = [
-            {"text": "ab", "tokens": ["a", "b"], "timestamps": [0.8, 1.6]},
+            {"text": "ab", "tokens": ["a", "b"], "timestamps": [0.8, 1.7]},
             {"text": "cd", "tokens": ["c", "d"], "timestamps": [0.1, 0.9]},
         ]
         _, method, diag = diagnose_timestamped_chunk_merge(chunks, [0.0, 1.0], [2.0, 2.0])

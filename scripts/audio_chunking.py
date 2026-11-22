@@ -259,11 +259,11 @@ def diagnose_timestamped_chunk_merge(chunk_results, chunk_start_seconds, chunk_d
                         distance = abs(absolute_time - lower_seams[i])
                     else:
                         continue
-                        bucket_index = next((j for j, edge in enumerate(distance_edges) if distance < edge), len(distance_edges))
-                        key = (side, distance_labels[bucket_index])
-                        counts = detail_counts.setdefault(key, [0, 0])
-                        counts[0] += 1
-                        counts[1] += len(rendered)
+                    bucket_index = next((j for j, edge in enumerate(distance_edges) if distance < edge), len(distance_edges))
+                    key = (side, distance_labels[bucket_index])
+                    counts = detail_counts.setdefault(key, [0, 0])
+                    counts[0] += 1
+                    counts[1] += len(rendered)
             if local_rejected:
                 boundary_counts.append({
                     "chunk_position": i,
