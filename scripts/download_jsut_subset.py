@@ -7,6 +7,8 @@ This script downloads only the selected WAVs and does not redistribute them.
 from __future__ import annotations
 
 import argparse
+import contextlib
+import io
 import hashlib
 import json
 import random
@@ -14,7 +16,25 @@ import shutil
 from pathlib import Path
 
 REPO_ID = "FluidInference/JSUT-basic5000"
-SUBSET_ROOT = "jsut_ver1.1/basic5000"
+SUBSET_ROOT = "basic5000"
+SUBSET_ROOT_CANDIDATES = ("basic5000", "jsut_ver1.1/basic5000")
+TRANSCRIPT_FILENAME_CANDIDATES = ("transcript_utf8.txt", "transcripts_utf8.txt")
+
+
+def locate_jsut_transcripts(hf_hub_download):
+    """Resolve the mirror's actual file layout without exposing lookup errors."""
+    for root in SUBSET_ROOT_CANDIDATES:
+        for transcript_name in TRANSCRIPT_FILENAME_CANDIDATES:
+            try:
+                path = hf_hub_download(
+                    repo_id=REPO_ID,
+                    repo_type="dataset",
+                    filename=f"{root}/{transcript_name}",
+                )
+                return Path(path), root
+            except Exception:
+                continue
+    raise ValueError("Required JSUT transcript file could not be located")
 
 
 def parse_transcripts(text: str) -> dict[str, str]:
@@ -24,13 +44,13 @@ def parse_transcripts(text: str) -> dict[str, str]:
         if not line:
             continue
         if ":" not in line:
-            raise ValueError(f"Malformed JSUT transcript line {line_number}: missing ':'")
+            raise ValueError("Malformed JSUT transcript input")
         utterance_id, sentence = line.split(":", 1)
         utterance_id, sentence = utterance_id.strip(), sentence.strip()
         if not utterance_id or not sentence:
             continue
         if utterance_id in result:
-            raise ValueError(f"Duplicate JSUT utterance id: {utterance_id}")
+            raise ValueError("Duplicate JSUT transcript entry")
         result[utterance_id] = sentence
     if not result:
         raise ValueError("No valid JSUT transcripts found")
@@ -60,12 +80,8 @@ def prepare_dataset(limit: int, output: Path, seed: int = 270021) -> dict:
     except ImportError as exc:
         raise SystemExit("Install huggingface_hub to download the JSUT evaluation subset") from exc
 
-    transcript_path = hf_hub_download(
-        repo_id=REPO_ID,
-        repo_type="dataset",
-        filename=f"{SUBSET_ROOT}/transcript_utf8.txt",
-    )
-    transcripts = parse_transcripts(Path(transcript_path).read_text(encoding="utf-8"))
+    transcript_path, dataset_root = locate_jsut_transcripts(hf_hub_download)
+    transcripts = parse_transcripts(transcript_path.read_text(encoding="utf-8"))
     buckets = {"short": [], "medium": [], "long": []}
     for utterance_id, sentence in transcripts.items():
         buckets[classify(sentence)].append((utterance_id, sentence))
@@ -78,18 +94,18 @@ def prepare_dataset(limit: int, output: Path, seed: int = 270021) -> dict:
             if buckets[category] and len(selected) < limit:
                 selected.append((category, *buckets[category].pop()))
     if not selected:
-        raise SystemExit("No JSUT utterances selected")
+        raise ValueError("No JSUT utterances selected")
 
     clips_dir = output / "clips"
     clips_dir.mkdir(parents=True, exist_ok=True)
     manifest = []
     for index, (category, utterance_id, sentence) in enumerate(selected):
-        filename = f"{SUBSET_ROOT}/wav/{utterance_id}.wav"
+        filename = f"{dataset_root}/wav/{utterance_id}.wav"
         source = Path(hf_hub_download(
             repo_id=REPO_ID, repo_type="dataset", filename=filename
         ))
         if not source.is_file() or source.stat().st_size == 0:
-            raise SystemExit(f"Downloaded JSUT audio is missing or empty: {utterance_id}")
+            raise ValueError("Downloaded JSUT audio is missing or empty")
         target_name = f"jsut_{index:05d}.wav"
         target = clips_dir / target_name
         shutil.copy2(source, target)
@@ -126,9 +142,14 @@ def main() -> int:
     parser.add_argument("--seed", type=int, default=270021)
     parser.add_argument("--output", type=Path, default=Path("tests/data/jsut_ja"))
     args = parser.parse_args()
-    if args.limit < 1:
-        parser.error("--limit must be >= 1")
-    metadata = prepare_dataset(args.limit, args.output, args.seed)
+    if not 1 <= args.limit <= 500:
+        parser.error("--limit must be between 1 and 500")
+    try:
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            metadata = prepare_dataset(args.limit, args.output, args.seed)
+    except Exception:
+        print("JSUT dataset preparation failed; detailed source information is suppressed.")
+        return 1
     print(json.dumps({
         "dataset": metadata["dataset_id"],
         "requested": metadata["requested"],

@@ -8,15 +8,6 @@ on:
         required: true
         default: "100"
         type: string
-  push:
-    paths:
-      - ".github/workflows/acquire-and-measure-baseline.yml"
-      - "scripts/run_sherpa_zipformer.py"
-      - "scripts/audio_chunking.py"
-      - "scripts/download_mdc_dataset.py"
-      - "scripts/prepare_common_voice_baseline.py"
-      - "scripts/deletion_metrics.py"
-      - "scripts/compare_asr_modes.py"
 
 permissions:
   contents: read
@@ -84,9 +75,9 @@ jobs:
               raise SystemExit("Prepared manifest is empty or copied count is inconsistent.")
           if len(rows) > int(os.environ["SAMPLE_LIMIT"]):
               raise SystemExit("Prepared sample exceeds SAMPLE_LIMIT.")
-          missing = [item["audio"] for item in rows if not (root / item["audio"]).is_file()]
-          if missing:
-              raise SystemExit(f"Prepared audio files are missing: {missing[:5]}")
+          missing_count = sum(not (root / item["audio"]).is_file() for item in rows)
+          if missing_count:
+              raise SystemExit(f"Prepared audio files are missing: {missing_count}")
           print(f"Prepared {len(rows)} verified clips (requested maximum: {data['requested']}).")
           PY
       - name: Download public Japanese Zipformer comparison model
@@ -139,7 +130,7 @@ jobs:
           python scripts/run_sherpa_zipformer.py tests/data/common_voice_ja/manifest.json --model-dir models/zipformer-ja --threads 2 --chunk-seconds 15 --chunk-overlap-seconds 2 --output-tsv tests/data/common_voice_ja/transcripts_overlap_2s.tsv
       - name: Calculate deletion-focused metrics
         run: |
-          python scripts/deletion_metrics.py tests/data/common_voice_ja/transcripts.tsv --output-json tests/data/common_voice_ja/baseline_metrics.json > tests/data/common_voice_ja/metrics.stdout.json
+          python scripts/deletion_metrics.py tests/data/common_voice_ja/transcripts.tsv --output-json tests/data/common_voice_ja/metrics.json > tests/data/common_voice_ja/metrics.stdout.json
           python scripts/deletion_metrics.py tests/data/common_voice_ja/transcripts_rms_normalized.tsv --output-json tests/data/common_voice_ja/normalized_metrics.json > tests/data/common_voice_ja/normalized_metrics.stdout.json
           python scripts/deletion_metrics.py tests/data/common_voice_ja/transcripts_chunked_15s.tsv --output-json tests/data/common_voice_ja/chunked_15s_metrics.json > tests/data/common_voice_ja/chunked_15s_metrics.stdout.json
           python scripts/deletion_metrics.py tests/data/common_voice_ja/transcripts_silence_aware_15s.tsv --output-json tests/data/common_voice_ja/silence_aware_15s_metrics.json > tests/data/common_voice_ja/silence_aware_15s_metrics.stdout.json
@@ -147,7 +138,7 @@ jobs:
       - name: Compare paired inference modes
         run: |
           python scripts/compare_asr_modes.py \
-            --report whole=tests/data/common_voice_ja/baseline_metrics.json \
+            --report whole=tests/data/common_voice_ja/metrics.json \
             --report rms_normalized=tests/data/common_voice_ja/normalized_metrics.json \
             --report fixed_15s=tests/data/common_voice_ja/chunked_15s_metrics.json \
             --report silence_aware=tests/data/common_voice_ja/silence_aware_15s_metrics.json \
@@ -159,7 +150,7 @@ jobs:
           import csv, json
           from pathlib import Path
           root = Path("tests/data/common_voice_ja")
-          report = json.loads((root / "baseline_metrics.json").read_text(encoding="utf-8"))
+          report = json.loads((root / "metrics.json").read_text(encoding="utf-8"))
           manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
           if report.get("case_count") != len(manifest["manifest"]):
               raise SystemExit("Metrics case_count does not match the prepared sample.")
@@ -212,33 +203,42 @@ jobs:
               chunk_count = int(row["inference_chunks"])
               starts = [float(value) for value in row["chunk_start_offsets_seconds"].split(",") if value]
               if len(starts) != chunk_count or not starts or starts[0] != 0.0:
-                  raise SystemExit(f"Invalid overlap chunk-start offsets for {row['case_id']}.")
+                  raise SystemExit("Invalid overlap chunk-start offsets.")
               if any(right <= left for left, right in zip(starts, starts[1:])):
-                  raise SystemExit(f"Non-increasing overlap chunk starts for {row['case_id']}.")
+                  raise SystemExit("Non-increasing overlap chunk starts.")
           print(f"Validated raw, normalized, fixed-chunk, silence-aware, and overlap metrics for {report['case_count']} clips.")
           PY
-      - name: Save baseline artifacts
+      - name: Sanitize output to aggregate-only metrics
+        if: success()
+        run: |
+          python scripts/sanitize_asr_report.py \
+            --root tests/data/common_voice_ja \
+            --comparison mode_comparison.json \
+            --report whole=metrics.json \
+            --report fixed_15s=chunked_15s_metrics.json \
+            --report silence_aware_15s=silence_aware_15s_metrics.json \
+            --report overlap_2s=overlap_2s_metrics.json \
+            --report rms_normalized=normalized_metrics.json \
+            --output tests/data/common_voice_ja/public_metrics.json
+      - name: Remove downloaded audio, cache, manifests, and raw reports
         if: always()
+        run: |
+          rm -rf tests/data/common_voice_ja/clips
+          rm -rf downloads/mdc corpus
+          rm -rf ~/.cache/huggingface/hub/datasets--mozilla-foundation--common_voice_17_0
+          rm -rf models/zipformer-ja
+          rm -f downloads/zipformer-ja.tar.bz2
+          rm -f tests/data/common_voice_ja/manifest.json
+          rm -f tests/data/common_voice_ja/transcripts*.tsv
+          rm -f tests/data/common_voice_ja/metrics.json
+          rm -f tests/data/common_voice_ja/*_metrics.json
+          rm -f tests/data/common_voice_ja/*.stdout.json
+          rm -f tests/data/common_voice_ja/mode_comparison.json
+      - name: Upload sanitized aggregate metrics only
+        if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: japanese-zipformer-baseline-${{ github.run_id }}
-          path: |
-            tests/data/common_voice_ja/manifest.json
-            tests/data/common_voice_ja/transcripts.tsv
-            tests/data/common_voice_ja/baseline_metrics.json
-            tests/data/common_voice_ja/metrics.stdout.json
-            tests/data/common_voice_ja/transcripts_rms_normalized.tsv
-            tests/data/common_voice_ja/normalized_metrics.json
-            tests/data/common_voice_ja/normalized_metrics.stdout.json
-            tests/data/common_voice_ja/transcripts_chunked_15s.tsv
-            tests/data/common_voice_ja/chunked_15s_metrics.json
-            tests/data/common_voice_ja/chunked_15s_metrics.stdout.json
-            tests/data/common_voice_ja/transcripts_silence_aware_15s.tsv
-            tests/data/common_voice_ja/silence_aware_15s_metrics.json
-            tests/data/common_voice_ja/silence_aware_15s_metrics.stdout.json
-            tests/data/common_voice_ja/transcripts_overlap_2s.tsv
-            tests/data/common_voice_ja/overlap_2s_metrics.json
-            tests/data/common_voice_ja/overlap_2s_metrics.stdout.json
-            tests/data/common_voice_ja/mode_comparison.json
+          name: japanese-zipformer-aggregate-${{ github.run_id }}
+          path: tests/data/common_voice_ja/public_metrics.json
           if-no-files-found: warn
           retention-days: 30

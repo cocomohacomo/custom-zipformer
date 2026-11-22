@@ -99,10 +99,8 @@ def main() -> int:
         })
 
     if missing_audio:
-        examples = ", ".join(missing_audio[:5])
         raise SystemExit(
-            f"Selected {len(selected)} rows but {len(missing_audio)} audio files are missing; "
-            f"examples: {examples}"
+            f"Selected {len(selected)} rows but {len(missing_audio)} audio files are missing."
         )
     if len(manifest) != len(selected):
         raise SystemExit(f"Prepared {len(manifest)} clips from {len(selected)} selected rows")
