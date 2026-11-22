@@ -279,39 +279,58 @@ def diagnose_timestamped_chunk_merge(chunk_results, chunk_start_seconds, chunk_d
             for (side, bucket), counts in sorted(detail_counts.items())
         ]
 
-        # Match only against kept tokens in the directly adjacent chunk.
-        # Exact token text and <=1s absolute-time distance are required.
-        # Greedy minimum-distance assignment guarantees one-to-one matches.
-        max_match_delta_seconds = 1.0
-        candidate_edges, candidate_counts = [], [0] * len(rejected_records)
+        # Conservative token correspondence: exact token text and <=250ms
+        # absolute-time difference. Use augmenting paths to maximize one-to-one
+        # matches before classifying candidates that lost an assignment conflict.
+        max_match_delta_seconds = 0.25
+        candidate_edges = [[] for _ in rejected_records]
         kept_by_chunk = {}
-        for record in kept_records:
-            kept_by_chunk.setdefault(record["chunk"], []).append(record)
+        for kept_record in kept_records:
+            kept_by_chunk.setdefault(kept_record["chunk"], []).append(kept_record)
         for rejected_index, record in enumerate(rejected_records):
             for kept_record in kept_by_chunk.get(record["neighbor"], []):
                 delta = abs(record["time"] - kept_record["time"])
                 if record["text"] == kept_record["text"] and delta <= max_match_delta_seconds:
-                    candidate_counts[rejected_index] += 1
-                    candidate_edges.append((delta, rejected_index, kept_record["chunk"], kept_record["token_index"]))
-        used_rejected, used_kept, correspondence = set(), set(), {}
-        for delta, rejected_index, chunk_index, token_index in sorted(candidate_edges):
-            kept_key = (chunk_index, token_index)
-            if rejected_index in used_rejected or kept_key in used_kept:
-                continue
-            used_rejected.add(rejected_index)
-            used_kept.add(kept_key)
-            record = rejected_records[rejected_index]
-            status = "matched_ambiguous" if candidate_counts[rejected_index] > 1 else "matched_unique"
+                    kept_key = (kept_record["chunk"], kept_record["token_index"])
+                    candidate_edges[rejected_index].append((delta, kept_key))
+            candidate_edges[rejected_index].sort(key=lambda item: (item[0], item[1]))
+        matched_kept = {}
+
+        def assign(rejected_index, seen_kept):
+            for _, kept_key in candidate_edges[rejected_index]:
+                if kept_key in seen_kept:
+                    continue
+                seen_kept.add(kept_key)
+                previous = matched_kept.get(kept_key)
+                if previous is None or assign(previous, seen_kept):
+                    matched_kept[kept_key] = rejected_index
+                    return True
+            return False
+
+        # Constrained records first; augmenting paths preserve maximum cardinality.
+        order = sorted(
+            range(len(rejected_records)),
+            key=lambda index: (len(candidate_edges[index]),
+                               candidate_edges[index][0][0] if candidate_edges[index] else float("inf"),
+                               index),
+        )
+        matched_rejected = set()
+        for rejected_index in order:
+            if candidate_edges[rejected_index] and assign(rejected_index, set()):
+                matched_rejected.add(rejected_index)
+        correspondence = {}
+        for rejected_index, record in enumerate(rejected_records):
+            candidate_count = len(candidate_edges[rejected_index])
+            if rejected_index in matched_rejected:
+                status = "matched_ambiguous" if candidate_count > 1 else "matched_unique"
+            elif candidate_count:
+                status = "unmatched_conflict"
+            else:
+                status = "unmatched_no_candidate"
             key = (record["side"], record["distance_bucket"], status)
             counts = correspondence.setdefault(key, [0, 0])
             counts[0] += 1
             counts[1] += len(record["text"])
-        for rejected_index, record in enumerate(rejected_records):
-            if rejected_index not in used_rejected:
-                key = (record["side"], record["distance_bucket"], "unmatched")
-                counts = correspondence.setdefault(key, [0, 0])
-                counts[0] += 1
-                counts[1] += len(record["text"])
         correspondence_detail = [
             {"side": side, "distance_bucket": bucket, "status": status,
              "rejected_tokens": counts[0], "rejected_token_chars": counts[1]}
