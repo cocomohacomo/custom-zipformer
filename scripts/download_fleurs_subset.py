@@ -43,7 +43,7 @@ def sha256(path: Path) -> str:
 def read_rows(path: Path) -> list[dict[str, str]]:
     """Read official FLEURS TSV (headerless) and compatible named-column TSVs."""
     with path.open(encoding="utf-8", newline="") as stream:
-        raw_rows = list(csv.reader(stream, delimiter="\\t"))
+        raw_rows = list(csv.reader(stream, delimiter="\t"))
     if not raw_rows:
         raise ValueError("FLEURS TSV is empty")
 
@@ -73,7 +73,7 @@ def read_rows(path: Path) -> list[dict[str, str]]:
         if not name or name != cells[file_index] or not text:
             continue
         if name in unique:
-            continue
+            raise ValueError("Duplicate FLEURS filename in TSV")
         unique[name] = {"file_name": name, "transcription": text}
     if not unique:
         raise ValueError("No usable FLEURS rows found")
