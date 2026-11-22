@@ -172,7 +172,7 @@ def main() -> int:
         "merged_text_chars", "final_text_chars", "chunk_merge_char_delta",
         "final_normalization_char_delta", "token_density_per_second", "decode_seconds",
         "merge_input_tokens", "merge_keep_tokens", "merge_reject_tokens", "merge_fallback_tokens",
-        "merge_unaccounted_tokens", "merge_reject_token_chars", "merge_boundary_rejections",
+        "merge_unaccounted_tokens", "merge_input_token_chars", "merge_keep_token_chars",\n        "merge_reject_token_chars", "merge_boundary_rejections",
     ]
     args.output_tsv.parent.mkdir(parents=True, exist_ok=True)
     with args.output_tsv.open("w", encoding="utf-8", newline="") as f:

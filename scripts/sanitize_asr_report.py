@@ -196,6 +196,21 @@ def sanitize_execution_diagnostics(report: dict) -> dict:
             )
             if all(value is not None for value in clean_stages.values()):
                 clean["decoder_stages"] = clean_stages
+        accounting = item.get("merge_accounting")
+        if mode == "overlap_2s" and isinstance(accounting, dict):
+            keys = ("input_tokens", "keep_tokens", "reject_tokens", "fallback_tokens", "input_token_chars", "keep_token_chars", "reject_token_chars", "timestamp_cases", "fallback_cases", "unaccounted_tokens")
+            values = {key: _number(accounting.get(key), integer=True, nonnegative=True) for key in keys}
+            raw_boundaries = accounting.get("boundary_rejections_by_chunk")
+            clean_boundaries = {}
+            if isinstance(raw_boundaries, dict):
+                for name, value in sorted(raw_boundaries.items()):
+                    if isinstance(name, str) and name.startswith("chunk_") and name[6:].isdigit() and isinstance(value, dict):
+                        tokens = _number(value.get("rejected_tokens"), integer=True, nonnegative=True)
+                        chars = _number(value.get("rejected_token_chars"), integer=True, nonnegative=True)
+                        if tokens is not None and chars is not None:
+                            clean_boundaries[name] = {"rejected_tokens": tokens, "rejected_token_chars": chars}
+            if all(value is not None for value in values.values()) and accounting.get("accounting_consistent") is True and values["unaccounted_tokens"] == 0:
+                clean["merge_accounting"] = {**values, "accounting_consistent": True, "boundary_rejections_by_chunk": clean_boundaries}
         output[mode] = clean
     return output
 

@@ -176,6 +176,52 @@ def _stage_diagnostics(rows: list[dict[str, str]]) -> dict:
     }
 
 
+def _merge_accounting_diagnostics(rows: list[dict[str, str]]) -> dict:
+    """Validate token accounting and emit aggregate-only overlap merge diagnostics."""
+    totals = {key: 0 for key in ("input_tokens", "keep_tokens", "reject_tokens", "fallback_tokens", "input_token_chars", "keep_token_chars", "reject_token_chars")}
+    methods = {"timestamp": 0, "text_fallback": 0}
+    boundaries: dict[str, dict[str, int]] = {}
+    for row in rows:
+        method = row.get("overlap_merge_method")
+        if method not in methods:
+            raise ValueError("overlap merge method is missing or invalid")
+        methods[method] += 1
+        names = {"input_tokens":"merge_input_tokens","keep_tokens":"merge_keep_tokens","reject_tokens":"merge_reject_tokens","fallback_tokens":"merge_fallback_tokens","unaccounted":"merge_unaccounted_tokens","input_token_chars":"merge_input_token_chars","keep_token_chars":"merge_keep_token_chars","reject_token_chars":"merge_reject_token_chars"}
+        values = {}
+        for key, column in names.items():
+            raw = row.get(column)
+            if not isinstance(raw, str) or not raw.isdigit():
+                raise ValueError("merge accounting diagnostic is missing or invalid")
+            values[key] = int(raw)
+        if method == "timestamp":
+            if values["fallback_tokens"] or values["unaccounted"] or values["input_tokens"] != values["keep_tokens"] + values["reject_tokens"]:
+                raise ValueError("timestamp merge token accounting is inconsistent")
+            if values["input_token_chars"] != values["keep_token_chars"] + values["reject_token_chars"]:
+                raise ValueError("timestamp merge character accounting is inconsistent")
+        elif values["keep_tokens"] or values["reject_tokens"] or values["fallback_tokens"] != values["input_tokens"] or values["unaccounted"]:
+            raise ValueError("fallback tokens must remain in the independent fallback bucket")
+        for key in totals:
+            totals[key] += values[key]
+        try:
+            records = json.loads(row.get("merge_boundary_rejections", ""))
+        except (TypeError, json.JSONDecodeError) as exc:
+            raise ValueError("merge boundary diagnostics are invalid") from exc
+        if not isinstance(records, list):
+            raise ValueError("merge boundary diagnostics must be a list")
+        for record in records:
+            if not isinstance(record, dict):
+                raise ValueError("merge boundary record is invalid")
+            position, count, chars = record.get("chunk_position"), record.get("rejected_tokens"), record.get("rejected_token_chars")
+            if any(isinstance(v, bool) or not isinstance(v, int) or v < 0 for v in (position, count, chars)):
+                raise ValueError("merge boundary counts are invalid")
+            bucket = boundaries.setdefault("chunk_" + str(position), {"rejected_tokens": 0, "rejected_token_chars": 0})
+            bucket["rejected_tokens"] += count
+            bucket["rejected_token_chars"] += chars
+    if totals["input_tokens"] != totals["keep_tokens"] + totals["reject_tokens"] + totals["fallback_tokens"]:
+        raise ValueError("aggregate merge token accounting is inconsistent")
+    return {"merge_accounting": {**totals, "timestamp_cases": methods["timestamp"], "fallback_cases": methods["text_fallback"], "unaccounted_tokens": 0, "accounting_consistent": True, "boundary_rejections_by_chunk": boundaries}}
+
+
 def validate_evaluation(root: Path) -> dict:
     manifest = _read_json(root / "manifest.json")
     entries = manifest.get("manifest")
@@ -259,6 +305,7 @@ def validate_evaluation(root: Path) -> dict:
                 method = row["overlap_merge_method"]
                 methods[method] = methods.get(method, 0) + 1
             result["overlap_merge_methods"] = methods
+            result.update(_merge_accounting_diagnostics(rows))
         results[mode] = result
     return {
         "case_count": len(expected),
