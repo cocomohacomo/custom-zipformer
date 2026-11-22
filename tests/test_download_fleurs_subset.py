@@ -58,20 +58,26 @@ class FleursSubsetTests(unittest.TestCase):
                 fleurs.read_rows(path)
             self.assertNotIn("PRIVATE_FLEURS_FILE.wav", str(caught.exception))
 
-
     def test_main_suppresses_downloader_exception_details(self):
-        output = io.StringIO()
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+
         def noisy_failure(*args, **kwargs):
             print("PRIVATE_FLEURS_ID transcript.wav")
             print("PRIVATE_FLEURS_ID transcript.wav", file=sys.stderr)
             raise RuntimeError("PRIVATE_FLEURS_ID transcript.wav")
+
         with patch.object(sys, "argv", ["download_fleurs_subset.py", "--limit", "1"]), \
              patch.object(fleurs, "prepare_dataset", side_effect=noisy_failure), \
-             contextlib.redirect_stdout(output):
+             contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
             result = fleurs.main()
+
         self.assertEqual(result, 1)
-        self.assertNotIn("PRIVATE_FLEURS_ID", output.getvalue())
-        self.assertNotIn("transcript.wav", output.getvalue())
+        self.assertNotIn("PRIVATE_FLEURS_ID", stdout.getvalue())
+        self.assertNotIn("transcript.wav", stdout.getvalue())
+        self.assertNotIn("PRIVATE_FLEURS_ID", stderr.getvalue())
+        self.assertNotIn("transcript.wav", stderr.getvalue())
+        self.assertIn("RuntimeError", stdout.getvalue())
 
     def test_prepare_dataset_extracts_only_selected_audio(self):
         with tempfile.TemporaryDirectory() as directory:
