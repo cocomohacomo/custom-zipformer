@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 import numpy as np
 
-from scripts.audio_chunking import merge_overlapping_text, merge_timestamped_chunks, split_at_low_energy, split_fixed_chunks, split_with_overlap
+from scripts.audio_chunking import diagnose_timestamped_chunk_merge, merge_overlapping_text, merge_timestamped_chunks, split_at_low_energy, split_fixed_chunks, split_with_overlap
 
 
 class SilenceAwareChunkingTests(unittest.TestCase):
@@ -109,6 +109,30 @@ class OverlapChunkingTests(unittest.TestCase):
     def test_custom_minimum_overlap_is_honored(self):
         self.assertEqual(merge_overlapping_text(["abcdef", "defghi"], min_overlap_chars=3), "abcdefghi")
 
+
+
+    def test_timestamp_diagnostics_account_for_kept_and_rejected_tokens(self):
+        results = [
+            {"text": "abcdef", "tokens": list("abcdef"), "timestamps": [0, 1, 2, 3, 4, 5]},
+            {"text": "defghi", "tokens": list("defghi"), "timestamps": [0, 0.2, 1, 2, 3, 4]},
+        ]
+        merged, method, diag = diagnose_timestamped_chunk_merge(results, [0.0, 4.0], [6.0, 6.0])
+        self.assertEqual((merged, method), ("abcdefghi", "timestamp"))
+        self.assertEqual(diag["input_tokens"], 12)
+        self.assertEqual(diag["keep_tokens"] + diag["reject_tokens"], 12)
+        self.assertEqual(diag["unaccounted_tokens"], 0)
+        self.assertEqual(diag["fallback_tokens"], 0)
+        self.assertGreater(diag["reject_token_chars"], 0)
+
+    def test_timestamp_diagnostics_separate_fallback_from_keep_reject(self):
+        results = [{"text": "abcdef", "tokens": ["abc"], "timestamps": [0]}]
+        merged, method, diag = diagnose_timestamped_chunk_merge(results, [0.0], [3.0])
+        self.assertEqual((merged, method), ("abcdef", "text_fallback"))
+        self.assertEqual(diag["fallback_tokens"], 1)
+        self.assertEqual(diag["keep_tokens"], 0)
+        self.assertEqual(diag["reject_tokens"], 0)
+        self.assertFalse(diag["accounting_applicable"])
+        self.assertEqual(diag["unaccounted_tokens"], 0)
 
     def test_timestamp_merge_assigns_overlap_to_midpoint(self):
         results = [

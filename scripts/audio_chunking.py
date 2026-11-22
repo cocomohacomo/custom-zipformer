@@ -198,3 +198,68 @@ def split_fixed_chunks(samples: np.ndarray, sample_rate: int, chunk_seconds: flo
         return []
     size = max(1, int(round(chunk_seconds * sample_rate)))
     return [x[start:min(start + size, len(x))] for start in range(0, len(x), size)]
+
+
+
+def diagnose_timestamped_chunk_merge(chunk_results, chunk_start_seconds, chunk_durations_seconds):
+    """Return count-only accounting for the existing timestamp merge decision.
+
+    The merge implementation and its output are deliberately untouched. Fallback
+    is a separate bucket because text concatenation does not select tokens.
+    """
+    merged, method = merge_timestamped_chunks(
+        chunk_results, chunk_start_seconds, chunk_durations_seconds
+    )
+    input_count = sum(len(item.get("tokens") or []) for item in chunk_results)
+    input_chars = sum(
+        len(str(token).replace("▁", " "))
+        for item in chunk_results for token in (item.get("tokens") or [])
+    )
+    kept = rejected = kept_chars = rejected_chars = 0
+    boundary_counts = []
+    if method == "timestamp":
+        n = len(chunk_results)
+        starts = [float(v) for v in chunk_start_seconds]
+        durations = [float(v) for v in chunk_durations_seconds]
+        lower = [float("-inf")] * n
+        upper = [float("inf")] * n
+        for i in range(n - 1):
+            previous_end = starts[i] + durations[i]
+            next_start = starts[i + 1]
+            if next_start < previous_end:
+                seam = (next_start + previous_end) / 2.0
+                upper[i] = seam
+                lower[i + 1] = seam
+        for i, item in enumerate(chunk_results):
+            local_rejected = local_rejected_chars = 0
+            for token, timestamp in zip(item.get("tokens") or [], item.get("timestamps") or []):
+                rendered = str(token).replace("▁", " ")
+                if lower[i] <= starts[i] + float(timestamp) < upper[i]:
+                    kept += 1
+                    kept_chars += len(rendered)
+                else:
+                    rejected += 1
+                    rejected_chars += len(rendered)
+                    local_rejected += 1
+                    local_rejected_chars += len(rendered)
+            if local_rejected:
+                boundary_counts.append({
+                    "chunk_position": i,
+                    "rejected_tokens": local_rejected,
+                    "rejected_token_chars": local_rejected_chars,
+                })
+    return merged, method, {
+        "input_tokens": input_count,
+        "keep_tokens": kept,
+        "reject_tokens": rejected,
+        "fallback_tokens": input_count if method == "text_fallback" else 0,
+        "input_token_chars": input_chars,
+        "keep_token_chars": kept_chars,
+        "reject_token_chars": rejected_chars,
+        "fallback": method == "text_fallback",
+        "unaccounted_tokens": (
+            input_count - kept - rejected if method == "timestamp" else 0
+        ),
+        "accounting_applicable": method == "timestamp",
+        "boundary_rejections": boundary_counts,
+    }
