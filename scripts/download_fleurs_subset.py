@@ -7,14 +7,13 @@ this script never commits or uploads audio.
 from __future__ import annotations
 
 import argparse
-import contextlib
-import io
 import csv
 import hashlib
 import json
 import random
 import shutil
 import tarfile
+import time
 from pathlib import Path
 
 REPO_ID = "google/fleurs"
@@ -61,15 +60,39 @@ def read_rows(path: Path) -> list[dict[str, str]]:
     return list(unique.values())
 
 
+def download_hub_file(filename: str) -> Path:
+    """Download a public FLEURS file with bounded retries and explicit revision."""
+    from huggingface_hub import hf_hub_download
+
+    last_error: Exception | None = None
+    for attempt in range(3):
+        try:
+            downloaded = hf_hub_download(
+                repo_id=REPO_ID,
+                repo_type="dataset",
+                filename=filename,
+                revision="main",
+                etag_timeout=60,
+            )
+            path = Path(downloaded)
+            if not path.is_file() or path.stat().st_size == 0:
+                raise OSError("Downloaded FLEURS file is missing or empty")
+            return path
+        except Exception as exc:
+            last_error = exc
+            if attempt < 2:
+                time.sleep(2 ** attempt)
+    assert last_error is not None
+    raise RuntimeError(f"FLEURS Hub download failed ({type(last_error).__name__})") from last_error
+
+
 def prepare_dataset(limit: int, output: Path, seed: int = 270021) -> dict:
     try:
-        from huggingface_hub import hf_hub_download
+        import huggingface_hub  # noqa: F401
     except ImportError as exc:
         raise SystemExit("Install huggingface_hub to download FLEURS") from exc
 
-    transcript_path = Path(hf_hub_download(
-        repo_id=REPO_ID, repo_type="dataset", filename=TRANSCRIPT_FILE
-    ))
+    transcript_path = download_hub_file(TRANSCRIPT_FILE)
     rows = read_rows(transcript_path)
     buckets: dict[str, list[dict[str, str]]] = {
         "short": [], "medium": [], "long": []
@@ -88,9 +111,7 @@ def prepare_dataset(limit: int, output: Path, seed: int = 270021) -> dict:
     if not selected:
         raise ValueError("No FLEURS utterances selected")
 
-    archive_path = Path(hf_hub_download(
-        repo_id=REPO_ID, repo_type="dataset", filename=AUDIO_ARCHIVE
-    ))
+    archive_path = download_hub_file(AUDIO_ARCHIVE)
     wanted = {row["file_name"] for _, row in selected}
     clips_dir = output / "clips"
     clips_dir.mkdir(parents=True, exist_ok=True)
@@ -163,11 +184,13 @@ def main() -> int:
     args = parser.parse_args()
     if args.limit < 1 or args.limit > 500:
         parser.error("--limit must be between 1 and 500")
+    stage = "dataset preparation"
     try:
-        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
-            metadata = prepare_dataset(args.limit, args.output, args.seed)
-    except Exception:
-        print("FLEURS dataset preparation failed; detailed source information is suppressed.")
+        metadata = prepare_dataset(args.limit, args.output, args.seed)
+    except Exception as exc:
+        # Report only the failing stage and exception class. Never print paths,
+        # utterance IDs, transcript text, signed URLs, or request headers.
+        print(f"FLEURS dataset preparation failed at {stage}: {type(exc).__name__}.")
         return 1
     print(json.dumps({
         "dataset": metadata["dataset_id"],
