@@ -6,6 +6,7 @@ import csv
 import json
 import sys
 import time
+import math
 from pathlib import Path
 
 
@@ -89,6 +90,9 @@ def main() -> int:
     p.add_argument("--model-dir", type=Path, required=True)
     p.add_argument("--output-tsv", type=Path, required=True)
     p.add_argument("--threads", type=int, default=2)
+    p.add_argument("--decoding-method", choices=("greedy_search", "modified_beam_search"), default="greedy_search", help="Transducer decoder search method; default preserves the baseline")
+    p.add_argument("--blank-penalty", type=float, default=0.0, help="Transducer blank penalty; default preserves the Sherpa-ONNX baseline")
+    p.add_argument("--max-active-paths", type=int, default=4, help="Active paths for modified_beam_search (ignored by greedy_search)")
     p.add_argument("--timeout", type=float, default=180)
     p.add_argument("--normalize-rms-dbfs", type=float, default=None,
                    help="Optionally amplify low-RMS audio toward this RMS dBFS target; no attenuation is applied")
@@ -104,6 +108,12 @@ def main() -> int:
     args = p.parse_args()
     if args.threads < 1:
         p.error("--threads must be >= 1")
+    if not math.isfinite(args.blank_penalty):
+        p.error("--blank-penalty must be finite")
+    if args.max_active_paths < 1:
+        p.error("--max-active-paths must be >= 1")
+    if args.decoding_method == "greedy_search" and args.max_active_paths != 4:
+        p.error("--max-active-paths is only configurable with modified_beam_search")
     if args.max_gain_db < 0:
         p.error("--max-gain-db must be >= 0")
     if args.chunk_seconds is not None and args.chunk_seconds <= 0:
@@ -146,7 +156,9 @@ def main() -> int:
         num_threads=args.threads,
         sample_rate=16000,
         feature_dim=80,
-        decoding_method="greedy_search",
+        decoding_method=args.decoding_method,
+        blank_penalty=args.blank_penalty,
+        max_active_paths=args.max_active_paths,
     )
     data = json.loads(args.manifest.read_text(encoding="utf-8"))
     entries = data.get("manifest")
@@ -266,6 +278,9 @@ def main() -> int:
     print(json.dumps({"decoded": len(entries), "output_tsv": str(args.output_tsv),
                       "normalization": {"target_rms_dbfs": args.normalize_rms_dbfs,
                                         "max_gain_db": args.max_gain_db if args.normalize_rms_dbfs is not None else 0},
+                      "decoder": {"decoding_method": args.decoding_method,
+                                  "blank_penalty": args.blank_penalty,
+                                  "max_active_paths": args.max_active_paths if args.decoding_method == "modified_beam_search" else None},
                       "chunk_seconds": args.chunk_seconds,
                       "silence_aware_chunk_seconds": args.silence_aware_chunk_seconds,
                       "diagnostics": fields[4:]}, ensure_ascii=False))
