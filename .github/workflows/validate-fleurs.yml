@@ -65,6 +65,10 @@ jobs:
         run: python -m pip install --upgrade pip 'huggingface_hub==0.36.2' sherpa-onnx soundfile scipy numpy
       - name: Test FLEURS dataset parser
         run: python -m unittest discover -s tests -p 'test_download_fleurs_subset.py' -v
+      - name: Validate inference syntax and timestamp merge diagnostics
+        run: |
+          python -m py_compile scripts/run_sherpa_zipformer.py scripts/audio_chunking.py
+          python -m unittest discover -s tests -p 'test_audio_chunking.py' -v
       - name: Download deterministic FLEURS Japanese subset
         run: |
           python scripts/download_fleurs_subset.py --limit "${{ inputs.sample_limit }}" --output tests/data/fleurs_ja
