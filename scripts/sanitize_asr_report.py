@@ -267,6 +267,20 @@ def sanitize_execution_diagnostics(report: dict) -> dict:
                             if tokens is not None and chars is not None:
                                 clean_multiplicity[key] = {"rejected_tokens": tokens, "rejected_token_chars": chars}
                 clean["merge_accounting"]["boundary_rejection_candidate_multiplicity"] = clean_multiplicity
+                raw_time_distribution = accounting.get("boundary_token_time_distribution")
+                clean_time_distribution = {}
+                allowed_time_keys = {
+                    role + "|" + str(time_bin)
+                    for role in ("keep", "reject") for time_bin in range(5)
+                }
+                if isinstance(raw_time_distribution, dict):
+                    for key, value in sorted(raw_time_distribution.items()):
+                        if key in allowed_time_keys and isinstance(value, dict):
+                            tokens = _number(value.get("tokens"), integer=True, nonnegative=True)
+                            chars = _number(value.get("token_chars"), integer=True, nonnegative=True)
+                            if tokens is not None and chars is not None:
+                                clean_time_distribution[key] = {"tokens": tokens, "token_chars": chars}
+                clean["merge_accounting"]["boundary_token_time_distribution"] = clean_time_distribution
         output[mode] = clean
     return output
 

@@ -185,6 +185,7 @@ def _merge_accounting_diagnostics(rows: list[dict[str, str]]) -> dict:
     correspondence_detail: dict[str, dict[str, int]] = {}
     sensitivity_detail: dict[str, dict[str, int]] = {}
     candidate_multiplicity_detail: dict[str, dict[str, int]] = {}
+    token_time_distribution_detail: dict[str, dict[str, int]] = {}
     for row in rows:
         method = row.get("overlap_merge_method")
         if method not in methods:
@@ -336,9 +337,40 @@ def _merge_accounting_diagnostics(rows: list[dict[str, str]]) -> dict:
             raise ValueError("candidate multiplicity does not reconcile with rejected tokens")
         if method == "text_fallback" and multiplicity:
             raise ValueError("fallback rows must not contain candidate multiplicity diagnostics")
+        try:
+            time_distribution = json.loads(row.get("merge_boundary_token_time_distribution", ""))
+        except (TypeError, json.JSONDecodeError) as exc:
+            raise ValueError("merge boundary token time distribution is invalid") from exc
+        if not isinstance(time_distribution, list):
+            raise ValueError("merge boundary token time distribution must be a list")
+        distribution_totals = {"keep": [0, 0], "reject": [0, 0]}
+        for item in time_distribution:
+            if not isinstance(item, dict):
+                raise ValueError("merge boundary token time distribution record is invalid")
+            role, time_bin = item.get("role"), item.get("time_bin")
+            count, chars = item.get("tokens"), item.get("token_chars")
+            if role not in ("keep", "reject"):
+                raise ValueError("merge boundary token time distribution role is invalid")
+            if isinstance(time_bin, bool) or not isinstance(time_bin, int) or time_bin not in range(5):
+                raise ValueError("merge boundary token time distribution bin is invalid")
+            if any(isinstance(x, bool) or not isinstance(x, int) or x < 0 for x in (count, chars)):
+                raise ValueError("merge boundary token time distribution counts are invalid")
+            key = role + "|" + str(time_bin)
+            aggregate = token_time_distribution_detail.setdefault(key, {"tokens": 0, "token_chars": 0})
+            aggregate["tokens"] += count
+            aggregate["token_chars"] += chars
+            distribution_totals[role][0] += count
+            distribution_totals[role][1] += chars
+        if method == "timestamp" and (
+            distribution_totals["keep"] != [values["keep_tokens"], values["keep_token_chars"]]
+            or distribution_totals["reject"] != [values["reject_tokens"], values["reject_token_chars"]]
+        ):
+            raise ValueError("boundary token time distribution does not reconcile")
+        if method == "text_fallback" and time_distribution:
+            raise ValueError("fallback rows must not contain token time distribution diagnostics")
     if totals["input_tokens"] != totals["keep_tokens"] + totals["reject_tokens"] + totals["fallback_tokens"]:
         raise ValueError("aggregate merge token accounting is inconsistent")
-    return {"merge_accounting": {**totals, "timestamp_cases": methods["timestamp"], "fallback_cases": methods["text_fallback"], "unaccounted_tokens": 0, "accounting_consistent": True, "boundary_rejections_by_chunk": boundaries, "boundary_rejections_by_side_and_distance": boundary_detail, "boundary_rejection_correspondence": correspondence_detail, "boundary_rejection_sensitivity": sensitivity_detail, "boundary_rejection_candidate_multiplicity": candidate_multiplicity_detail}}
+    return {"merge_accounting": {**totals, "timestamp_cases": methods["timestamp"], "fallback_cases": methods["text_fallback"], "unaccounted_tokens": 0, "accounting_consistent": True, "boundary_rejections_by_chunk": boundaries, "boundary_rejections_by_side_and_distance": boundary_detail, "boundary_rejection_correspondence": correspondence_detail, "boundary_rejection_sensitivity": sensitivity_detail, "boundary_rejection_candidate_multiplicity": candidate_multiplicity_detail, "boundary_token_time_distribution": token_time_distribution_detail}}
 
 
 def validate_evaluation(root: Path) -> dict:

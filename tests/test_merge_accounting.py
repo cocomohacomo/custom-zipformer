@@ -21,6 +21,7 @@ class MergeAccountingTests(unittest.TestCase):
             "merge_boundary_rejection_correspondence": '[{"side":"after_seam_from_left_chunk","distance_bucket":"lt_100ms","status":"unmatched_no_candidate","rejected_tokens":2,"rejected_token_chars":2}]',
             "merge_boundary_rejection_candidate_multiplicity": '[{"threshold_ms":100,"side":"after_seam_from_left_chunk","distance_bucket":"lt_100ms","candidate_multiplicity":"0","rejected_tokens":2,"rejected_token_chars":2},{"threshold_ms":250,"side":"after_seam_from_left_chunk","distance_bucket":"lt_100ms","candidate_multiplicity":"0","rejected_tokens":2,"rejected_token_chars":2},{"threshold_ms":500,"side":"after_seam_from_left_chunk","distance_bucket":"lt_100ms","candidate_multiplicity":"0","rejected_tokens":2,"rejected_token_chars":2}]',
             "merge_boundary_rejection_sensitivity": '[{"threshold_ms":100,"side":"after_seam_from_left_chunk","distance_bucket":"lt_100ms","status":"unmatched_no_candidate","rejected_tokens":2,"rejected_token_chars":2},{"threshold_ms":250,"side":"after_seam_from_left_chunk","distance_bucket":"lt_100ms","status":"unmatched_no_candidate","rejected_tokens":2,"rejected_token_chars":2},{"threshold_ms":500,"side":"after_seam_from_left_chunk","distance_bucket":"lt_100ms","status":"unmatched_no_candidate","rejected_tokens":2,"rejected_token_chars":2}]',
+            "merge_boundary_token_time_distribution": '[{"role":"keep","time_bin":0,"tokens":3,"token_chars":3},{"role":"reject","time_bin":4,"tokens":2,"token_chars":2}]',
         }
         value.update(overrides)
         return value
@@ -30,7 +31,7 @@ class MergeAccountingTests(unittest.TestCase):
             "input_tokens": 7, "keep_tokens": 4, "reject_tokens": 3,
             "fallback_tokens": 0, "unaccounted_tokens": 0,
             "input_token_chars": 12, "keep_token_chars": 7,
-            "reject_token_chars": 5, "boundary_rejections": [], "boundary_rejection_detail": [], "boundary_rejection_correspondence": [], "boundary_rejection_sensitivity": [], "boundary_rejection_candidate_multiplicity": [], "boundary_rejection_candidate_multiplicity": [],
+            "reject_token_chars": 5, "boundary_rejections": [], "boundary_rejection_detail": [], "boundary_rejection_correspondence": [], "boundary_rejection_sensitivity": [], "boundary_rejection_candidate_multiplicity": [], "boundary_token_time_distribution": [],
         })
         self.assertEqual(fields["merge_input_token_chars"], 12)
         self.assertEqual(fields["merge_keep_token_chars"], 7)
@@ -39,6 +40,7 @@ class MergeAccountingTests(unittest.TestCase):
         self.assertEqual(fields["merge_boundary_rejection_detail"], "[]")
         self.assertEqual(fields["merge_boundary_rejection_correspondence"], "[]")
         self.assertEqual(fields["merge_boundary_rejection_candidate_multiplicity"], "[]")
+        self.assertEqual(fields["merge_boundary_token_time_distribution"], "[]")
 
     def test_timestamp_accounting_and_boundary_aggregation(self):
         result = _merge_accounting_diagnostics([self.row(), self.row()])
@@ -110,6 +112,20 @@ class MergeAccountingTests(unittest.TestCase):
                     if x["threshold_ms"] == threshold),
                 diag["reject_tokens"],
             )
+
+    def test_common_time_distribution_uses_same_five_bins_for_keep_and_reject(self):
+        chunks = [
+            {"text": "abcd", "tokens": list("abcd"), "timestamps": [0.1, 0.7, 1.2, 1.9]},
+            {"text": "efgh", "tokens": list("efgh"), "timestamps": [0.1, 0.7, 1.2, 1.9]},
+        ]
+        _, method, diag = diagnose_timestamped_chunk_merge(chunks, [0.0, 1.0], [2.0, 2.0])
+        self.assertEqual(method, "timestamp")
+        distribution = {(x["role"], x["time_bin"]): x for x in diag["boundary_token_time_distribution"]}
+        self.assertEqual(sum(x["tokens"] for x in distribution.values()), diag["input_tokens"])
+        self.assertEqual(sum(x["token_chars"] for x in distribution.values()), diag["input_token_chars"])
+        self.assertEqual(sum(x["tokens"] for (role, _), x in distribution.items() if role == "keep"), diag["keep_tokens"])
+        self.assertEqual(sum(x["tokens"] for (role, _), x in distribution.items() if role == "reject"), diag["reject_tokens"])
+        self.assertTrue(all(0 <= time_bin <= 4 for _, time_bin in distribution))
 
     def test_candidate_multiplicity_includes_zero_candidate_bucket(self):
         chunks = [
@@ -210,6 +226,9 @@ class MergeAccountingTests(unittest.TestCase):
                     "after_seam_from_left_chunk|lt_100ms|matched_unique": {"rejected_tokens": 1, "rejected_token_chars": 1}},
                 "boundary_rejection_candidate_multiplicity": {
                     "100|after_seam_from_left_chunk|lt_100ms|0": {"rejected_tokens": 1, "rejected_token_chars": 1, "token_text": "PRIVATE_TOKEN_SENTINEL", "case_id": "PRIVATE_CASE_SENTINEL"}},
+                "boundary_token_time_distribution": {
+                    "keep|0": {"tokens": 3, "token_chars": 3, "token_text": "PRIVATE_TOKEN_SENTINEL"},
+                    "reject|4": {"tokens": 2, "token_chars": 2, "case_id": "PRIVATE_CASE_SENTINEL"}},
                 "private_case_id": "MUST_NOT_LEAK"}}}}
         clean = sanitize_execution_diagnostics(source)
         rendered = str(clean)
@@ -222,6 +241,7 @@ class MergeAccountingTests(unittest.TestCase):
         self.assertIn("boundary_rejection_correspondence", rendered)
         self.assertIn("matched_unique", rendered)
         self.assertIn("boundary_rejection_candidate_multiplicity", rendered)
+        self.assertIn("boundary_token_time_distribution", rendered)
         self.assertNotIn("token_text", rendered)
 
 

@@ -218,6 +218,7 @@ def diagnose_timestamped_chunk_merge(chunk_results, chunk_start_seconds, chunk_d
     kept = rejected = kept_chars = rejected_chars = 0
     boundary_counts = []
     rejection_detail = []
+    time_distribution_counts = {}
     distance_edges = (0.10, 0.25, 0.50)
     distance_labels = ("lt_100ms", "100_250ms", "250_500ms", "gte_500ms")
     if method == "timestamp":
@@ -245,6 +246,13 @@ def diagnose_timestamped_chunk_merge(chunk_results, chunk_start_seconds, chunk_d
                 rendered = str(token).replace("▁", " ")
                 absolute_time = starts[i] + float(timestamp)
                 record = {"chunk": i, "token_index": token_index, "text": rendered, "time": absolute_time}
+                # Shared chunk-local time axis for kept and rejected tokens.
+                fraction = min(1.0, max(0.0, float(timestamp) / durations[i]))
+                time_bin = min(4, int(fraction * 5))
+                role = "keep" if lower[i] <= absolute_time < upper[i] else "reject"
+                pair = time_distribution_counts.setdefault((role, time_bin), [0, 0])
+                pair[0] += 1
+                pair[1] += len(rendered)
                 if lower[i] <= absolute_time < upper[i]:
                     kept += 1
                     kept_chars += len(rendered)
@@ -277,6 +285,10 @@ def diagnose_timestamped_chunk_merge(chunk_results, chunk_start_seconds, chunk_d
             {"side": side, "distance_bucket": bucket, "rejected_tokens": counts[0],
              "rejected_token_chars": counts[1]}
             for (side, bucket), counts in sorted(detail_counts.items())
+        ]
+        boundary_token_time_distribution = [
+            {"role": role, "time_bin": time_bin, "tokens": counts[0], "token_chars": counts[1]}
+            for (role, time_bin), counts in sorted(time_distribution_counts.items())
         ]
 
         # Diagnostic-only correspondence sensitivity; never affects merge output.
@@ -353,4 +365,5 @@ def diagnose_timestamped_chunk_merge(chunk_results, chunk_start_seconds, chunk_d
         "boundary_rejection_correspondence": correspondence_detail if method == "timestamp" else [],
         "boundary_rejection_sensitivity": sensitivity_detail if method == "timestamp" else [],
         "boundary_rejection_candidate_multiplicity": candidate_multiplicity_detail if method == "timestamp" else [],
+        "boundary_token_time_distribution": boundary_token_time_distribution if method == "timestamp" else [],
     }
