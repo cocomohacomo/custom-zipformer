@@ -30,7 +30,7 @@ class ValidateAsrEvaluationTests(unittest.TestCase):
                     "merge_input_tokens", "merge_keep_tokens", "merge_reject_tokens",
                     "merge_fallback_tokens", "merge_unaccounted_tokens",
                     "merge_input_token_chars", "merge_keep_token_chars", "merge_reject_token_chars",
-                    "merge_boundary_rejections", "merge_boundary_rejection_detail", "merge_boundary_rejection_correspondence", "merge_boundary_rejection_sensitivity", "merge_boundary_rejection_candidate_multiplicity", "merge_boundary_token_time_distribution",
+                    "merge_boundary_rejections", "merge_boundary_rejection_detail", "merge_boundary_rejection_correspondence", "merge_boundary_rejection_sensitivity", "merge_boundary_rejection_candidate_multiplicity", "merge_boundary_token_time_distribution", "merge_reject_rescue_shadow",
                 ], delimiter="\t")
                 writer.writeheader()
                 for index, case_id in enumerate(ids):
@@ -61,6 +61,7 @@ class ValidateAsrEvaluationTests(unittest.TestCase):
                         "merge_boundary_rejection_sensitivity": '[{"threshold_ms":100,"side":"after_seam_from_left_chunk","distance_bucket":"lt_100ms","status":"unmatched_no_candidate","rejected_tokens":2,"rejected_token_chars":2},{"threshold_ms":250,"side":"after_seam_from_left_chunk","distance_bucket":"lt_100ms","status":"unmatched_no_candidate","rejected_tokens":2,"rejected_token_chars":2},{"threshold_ms":500,"side":"after_seam_from_left_chunk","distance_bucket":"lt_100ms","status":"unmatched_no_candidate","rejected_tokens":2,"rejected_token_chars":2}]',
                         "merge_boundary_rejection_candidate_multiplicity": '[{"threshold_ms":100,"side":"after_seam_from_left_chunk","distance_bucket":"lt_100ms","candidate_multiplicity":"0","rejected_tokens":2,"rejected_token_chars":2},{"threshold_ms":250,"side":"after_seam_from_left_chunk","distance_bucket":"lt_100ms","candidate_multiplicity":"0","rejected_tokens":2,"rejected_token_chars":2},{"threshold_ms":500,"side":"after_seam_from_left_chunk","distance_bucket":"lt_100ms","candidate_multiplicity":"0","rejected_tokens":2,"rejected_token_chars":2}]',
                         "merge_boundary_token_time_distribution": '[{"role":"keep","time_bin":0,"tokens":8,"token_chars":8},{"role":"reject","time_bin":4,"tokens":2,"token_chars":2}]',
+                        "merge_reject_rescue_shadow": json.dumps({str(t): {"rejected_tokens": 2, "rescued_tokens": 0, "rescued_token_chars": 0, "not_rescued_tokens": 2, "classification": {"rescued_unique": 0, "no_candidate": 2, "ambiguous": 0, "candidate_collision": 0}, "accounting_ok": True} for t in (100, 250, 500)}),
                     })
             report = {
                 "case_count": 2,
