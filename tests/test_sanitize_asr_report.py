@@ -352,7 +352,12 @@ class SanitizeAsrReportTests(unittest.TestCase):
 
 
     def test_reject_rescue_shadow_sanitizer_keeps_only_valid_aggregate_thresholds(self):
-        raw = {"merge_accounting": {
+        raw = {"audio_duration_seconds": {"min": 1, "median": 2, "max": 3},
+               "chunking": {"single_chunk_cases": 0, "multi_chunk_cases": 1,
+                   "multi_chunk_case_rate": 1, "total_chunks": 2, "max_chunks_per_case": 2,
+                   "short_chunks_lt_25ms": 0, "silent_chunks": 0,
+                   "empty_output_chunks": 0, "empty_output_chunk_rate": 0},
+               "merge_accounting": {
             "input_tokens": 5, "keep_tokens": 1, "reject_tokens": 4, "fallback_tokens": 0,
             "input_token_chars": 5, "keep_token_chars": 1, "reject_token_chars": 4,
             "timestamp_cases": 1, "fallback_cases": 0, "unaccounted_tokens": 0,
