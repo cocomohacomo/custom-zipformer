@@ -61,7 +61,7 @@ class MergeAccountingTests(unittest.TestCase):
                        merge_reject_tokens="0", merge_fallback_tokens="5",
                        merge_unaccounted_tokens="0", merge_input_token_chars="5",
                        merge_keep_token_chars="0", merge_reject_token_chars="0",
-                       merge_boundary_rejections="[]", merge_boundary_rejection_detail="[]", merge_boundary_rejection_correspondence="[]", merge_boundary_rejection_sensitivity="[]", merge_boundary_rejection_candidate_multiplicity="[]")
+                       merge_boundary_rejections="[]", merge_boundary_rejection_detail="[]", merge_boundary_rejection_correspondence="[]", merge_boundary_rejection_sensitivity="[]", merge_boundary_rejection_candidate_multiplicity="[]", merge_boundary_token_time_distribution="[]")
         result = _merge_accounting_diagnostics([row])["merge_accounting"]
         self.assertEqual(result["fallback_tokens"], 5)
         self.assertEqual(result["keep_tokens"] + result["reject_tokens"], 0)
