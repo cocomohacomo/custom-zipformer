@@ -283,6 +283,7 @@ def diagnose_timestamped_chunk_merge(chunk_results, chunk_start_seconds, chunk_d
         kept_by_chunk = {}
         for kept_record in kept_records: kept_by_chunk.setdefault(kept_record["chunk"], []).append(kept_record)
         sensitivity_detail = []
+        candidate_multiplicity_detail = []
         for threshold_ms in (100, 250, 500):
             limit = threshold_ms / 1000.0
             edges = [[] for _ in rejected_records]
@@ -292,6 +293,24 @@ def diagnose_timestamped_chunk_merge(chunk_results, chunk_start_seconds, chunk_d
                     if record["text"] == kept_record["text"] and delta <= limit:
                         edges[ri].append((delta, (kept_record["chunk"], kept_record["token_index"])))
                 edges[ri].sort(key=lambda item: (item[0], item[1]))
+
+            # Count candidate multiplicity before one-to-one assignment. This is
+            # diagnostic-only and does not alter the matching graph or merge result.
+            multiplicity_counts = {}
+            for ri, record in enumerate(rejected_records):
+                candidate_count = len(edges[ri])
+                multiplicity = "0" if candidate_count == 0 else ("1" if candidate_count == 1 else "2_plus")
+                key = (record["side"], record["distance_bucket"], multiplicity)
+                pair = multiplicity_counts.setdefault(key, [0, 0])
+                pair[0] += 1
+                pair[1] += len(record["text"])
+            for (side, bucket, multiplicity), pair in sorted(multiplicity_counts.items()):
+                candidate_multiplicity_detail.append({
+                    "threshold_ms": threshold_ms, "side": side,
+                    "distance_bucket": bucket, "candidate_multiplicity": multiplicity,
+                    "rejected_tokens": pair[0], "rejected_token_chars": pair[1],
+                })
+
             assigned = {}
             def assign(ri, seen):
                 for _, key in edges[ri]:
@@ -333,4 +352,5 @@ def diagnose_timestamped_chunk_merge(chunk_results, chunk_start_seconds, chunk_d
         "boundary_rejection_detail": rejection_detail,
         "boundary_rejection_correspondence": correspondence_detail if method == "timestamp" else [],
         "boundary_rejection_sensitivity": sensitivity_detail if method == "timestamp" else [],
+        "boundary_rejection_candidate_multiplicity": candidate_multiplicity_detail if method == "timestamp" else [],
     }

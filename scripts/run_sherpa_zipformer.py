@@ -107,6 +107,9 @@ def _merge_diagnostic_tsv_fields(diagnostics: dict) -> dict[str, object]:
         "merge_boundary_rejection_sensitivity": json.dumps(
             diagnostics.get("boundary_rejection_sensitivity", []), separators=(",", ":")
         ),
+        "merge_boundary_rejection_candidate_multiplicity": json.dumps(
+            diagnostics.get("boundary_rejection_candidate_multiplicity", []), separators=(",", ":")
+        ),
     }
 
 
@@ -201,7 +204,7 @@ def main() -> int:
         "merge_unaccounted_tokens", "merge_input_token_chars", "merge_keep_token_chars",
         "merge_reject_token_chars", "merge_boundary_rejections",
         "merge_boundary_rejection_detail", "merge_boundary_rejection_correspondence",
-        "merge_boundary_rejection_sensitivity",
+        "merge_boundary_rejection_sensitivity", "merge_boundary_rejection_candidate_multiplicity",
     ]
     args.output_tsv.parent.mkdir(parents=True, exist_ok=True)
     with args.output_tsv.open("w", encoding="utf-8", newline="") as f:
