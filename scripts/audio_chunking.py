@@ -4,6 +4,8 @@ from __future__ import annotations
 import math
 import numpy as np
 
+from scripts.reject_rescue_simulation import simulate_reject_rescue
+
 
 def split_at_low_energy(
     samples: np.ndarray,
@@ -291,6 +293,7 @@ def diagnose_timestamped_chunk_merge(chunk_results, chunk_start_seconds, chunk_d
             for (role, time_bin), counts in sorted(time_distribution_counts.items())
         ]
 
+        shadow_candidates = [{} for _ in rejected_records]
         # Diagnostic-only correspondence sensitivity; never affects merge output.
         kept_by_chunk = {}
         for kept_record in kept_records: kept_by_chunk.setdefault(kept_record["chunk"], []).append(kept_record)
@@ -305,6 +308,7 @@ def diagnose_timestamped_chunk_merge(chunk_results, chunk_start_seconds, chunk_d
                     if record["text"] == kept_record["text"] and delta <= limit:
                         edges[ri].append((delta, (kept_record["chunk"], kept_record["token_index"])))
                 edges[ri].sort(key=lambda item: (item[0], item[1]))
+                shadow_candidates[ri][threshold_ms] = [str(key[0]) + ':' + str(key[1]) for _, key in edges[ri]]
 
             # Count candidate multiplicity before one-to-one assignment. This is
             # diagnostic-only and does not alter the matching graph or merge result.
@@ -365,5 +369,6 @@ def diagnose_timestamped_chunk_merge(chunk_results, chunk_start_seconds, chunk_d
         "boundary_rejection_correspondence": correspondence_detail if method == "timestamp" else [],
         "boundary_rejection_sensitivity": sensitivity_detail if method == "timestamp" else [],
         "boundary_rejection_candidate_multiplicity": candidate_multiplicity_detail if method == "timestamp" else [],
+        "reject_rescue_shadow": (simulate_reject_rescue([{"rejected_id": str(index), "token_chars": len(record["text"]), "candidates": shadow_candidates[index]} for index, record in enumerate(rejected_records)]) if method == "timestamp" else {}),
         "boundary_token_time_distribution": boundary_token_time_distribution if method == "timestamp" else [],
     }
