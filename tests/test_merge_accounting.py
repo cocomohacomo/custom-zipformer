@@ -98,15 +98,27 @@ class MergeAccountingTests(unittest.TestCase):
                 for x in diag["boundary_rejection_candidate_multiplicity"]
                 if x["side"] == "after_seam_from_left_chunk"
                 and x["distance_bucket"] == "100_250ms"}
-        self.assertEqual(rows[(100, "0")]["rejected_tokens"], 1)
+        self.assertEqual(rows[(100, "1")]["rejected_tokens"], 2)
         self.assertEqual(rows[(250, "1")]["rejected_tokens"], 1)
-        self.assertEqual(rows[(500, "2_plus")]["rejected_tokens"], 1)
+        self.assertEqual(rows[(250, "2_plus")]["rejected_tokens"], 1)
+        self.assertEqual(rows[(500, "2_plus")]["rejected_tokens"], 2)
         for threshold in (100, 250, 500):
             self.assertEqual(
                 sum(x["rejected_tokens"] for x in diag["boundary_rejection_candidate_multiplicity"]
                     if x["threshold_ms"] == threshold),
                 diag["reject_tokens"],
             )
+
+    def test_candidate_multiplicity_includes_zero_candidate_bucket(self):
+        chunks = [
+            {"text": "Y", "tokens": ["Y"], "timestamps": [1.8]},
+            {"text": "XXb", "tokens": ["X", "X", "b"], "timestamps": [0.6, 0.8, 1.5]},
+        ]
+        _, method, diag = diagnose_timestamped_chunk_merge(chunks, [0.0, 1.0], [2.0, 2.0])
+        self.assertEqual(method, "timestamp")
+        zero = [x for x in diag["boundary_rejection_candidate_multiplicity"]
+                if x["threshold_ms"] == 500 and x["candidate_multiplicity"] == "0"]
+        self.assertEqual(sum(x["rejected_tokens"] for x in zero), 1)
 
     def test_correspondence_separates_assignment_conflict_from_no_candidate(self):
         chunks = [
