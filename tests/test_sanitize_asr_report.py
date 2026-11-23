@@ -351,5 +351,21 @@ class SanitizeAsrReportTests(unittest.TestCase):
         self.assertEqual(safe["silence_aware_15s"]["deletion_delta"], -3)
 
 
+    def test_reject_rescue_shadow_sanitizer_keeps_only_valid_aggregate_thresholds(self):
+        raw = {"merge_accounting": {"reject_rescue_shadow": {
+            "100": {"rejected_tokens": 4, "rescued_tokens": 1, "rescued_token_chars": 2,
+                    "not_rescued_tokens": 3, "classification": {"rescued_unique": 1,
+                    "no_candidate": 2, "ambiguous": 1, "candidate_collision": 0},
+                    "accounting_ok": True, "private_ids": ["SECRET"]},
+            "250": {"rejected_tokens": 4, "rescued_tokens": -1},
+            "private": {"transcript": "SECRET"},
+        }}}
+        clean = sanitize_execution_diagnostics({"modes": {"overlap_2s": raw}})
+        rendered = json.dumps(clean)
+        self.assertIn("100", rendered)
+        self.assertNotIn("SECRET", rendered)
+        self.assertNotIn("private_ids", rendered)
+        self.assertNotIn('"250"', rendered)
+
 if __name__ == "__main__":
     unittest.main()
