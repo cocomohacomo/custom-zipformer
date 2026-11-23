@@ -186,6 +186,7 @@ def _merge_accounting_diagnostics(rows: list[dict[str, str]]) -> dict:
     sensitivity_detail: dict[str, dict[str, int]] = {}
     candidate_multiplicity_detail: dict[str, dict[str, int]] = {}
     token_time_distribution_detail: dict[str, dict[str, int]] = {}
+    rescue_totals = {t: {"rejected_tokens": 0, "rescued_tokens": 0, "rescued_token_chars": 0, "not_rescued_tokens": 0, "rescued_unique": 0, "no_candidate": 0, "ambiguous": 0, "candidate_collision": 0} for t in (100, 250, 500)}
     for row in rows:
         method = row.get("overlap_merge_method")
         if method not in methods:
@@ -338,6 +339,46 @@ def _merge_accounting_diagnostics(rows: list[dict[str, str]]) -> dict:
         if method == "text_fallback" and multiplicity:
             raise ValueError("fallback rows must not contain candidate multiplicity diagnostics")
         try:
+            rescue = json.loads(row.get("merge_reject_rescue_shadow", ""))
+        except (TypeError, json.JSONDecodeError) as exc:
+            raise ValueError("reject rescue shadow diagnostics are invalid") from exc
+        if not isinstance(rescue, dict):
+            raise ValueError("reject rescue shadow diagnostics must be an object")
+        if method == "text_fallback":
+            if rescue:
+                raise ValueError("fallback rows must not contain reject rescue diagnostics")
+        else:
+            if set(rescue) != {"100", "250", "500"} and set(rescue) != {100, 250, 500}:
+                raise ValueError("reject rescue thresholds are missing or invalid")
+            for threshold in (100, 250, 500):
+                item = rescue.get(str(threshold), rescue.get(threshold))
+                if not isinstance(item, dict):
+                    raise ValueError("reject rescue threshold record is invalid")
+                classification = item.get("classification")
+                names = ("rescued_unique", "no_candidate", "ambiguous", "candidate_collision")
+                if not isinstance(classification, dict) or set(classification) != set(names):
+                    raise ValueError("reject rescue classification is incomplete")
+                numeric = [item.get(k) for k in ("rejected_tokens", "rescued_tokens", "rescued_token_chars", "not_rescued_tokens")]
+                counts = [classification.get(k) for k in names]
+                if any(isinstance(v, bool) or not isinstance(v, int) or v < 0 for v in numeric + counts):
+                    raise ValueError("reject rescue counts are invalid")
+                rejected, rescued, rescued_chars, not_rescued = numeric
+                if rejected != values["reject_tokens"] or rescued + not_rescued != rejected:
+                    raise ValueError("reject rescue token accounting does not reconcile")
+                if sum(counts) != rejected or classification["rescued_unique"] != rescued:
+                    raise ValueError("reject rescue classification does not reconcile")
+                if rescued_chars > values["reject_token_chars"]:
+                    raise ValueError("rescued character count exceeds rejected characters")
+                if item.get("accounting_ok") is not True:
+                    raise ValueError("reject rescue accounting flag is not true")
+                aggregate = rescue_totals[threshold]
+                aggregate["rejected_tokens"] += rejected
+                aggregate["rescued_tokens"] += rescued
+                aggregate["rescued_token_chars"] += rescued_chars
+                aggregate["not_rescued_tokens"] += not_rescued
+                for name in names:
+                    aggregate[name] += classification[name]
+        try:
             time_distribution = json.loads(row.get("merge_boundary_token_time_distribution", ""))
         except (TypeError, json.JSONDecodeError) as exc:
             raise ValueError("merge boundary token time distribution is invalid") from exc
@@ -370,7 +411,7 @@ def _merge_accounting_diagnostics(rows: list[dict[str, str]]) -> dict:
             raise ValueError("fallback rows must not contain token time distribution diagnostics")
     if totals["input_tokens"] != totals["keep_tokens"] + totals["reject_tokens"] + totals["fallback_tokens"]:
         raise ValueError("aggregate merge token accounting is inconsistent")
-    return {"merge_accounting": {**totals, "timestamp_cases": methods["timestamp"], "fallback_cases": methods["text_fallback"], "unaccounted_tokens": 0, "accounting_consistent": True, "boundary_rejections_by_chunk": boundaries, "boundary_rejections_by_side_and_distance": boundary_detail, "boundary_rejection_correspondence": correspondence_detail, "boundary_rejection_sensitivity": sensitivity_detail, "boundary_rejection_candidate_multiplicity": candidate_multiplicity_detail, "boundary_token_time_distribution": token_time_distribution_detail}}
+    return {"merge_accounting": {**totals, "timestamp_cases": methods["timestamp"], "fallback_cases": methods["text_fallback"], "unaccounted_tokens": 0, "accounting_consistent": True, "boundary_rejections_by_chunk": boundaries, "boundary_rejections_by_side_and_distance": boundary_detail, "boundary_rejection_correspondence": correspondence_detail, "boundary_rejection_sensitivity": sensitivity_detail, "boundary_rejection_candidate_multiplicity": candidate_multiplicity_detail, "boundary_token_time_distribution": token_time_distribution_detail, "reject_rescue_shadow": {str(k): v for k, v in rescue_totals.items()}}}
 
 
 def validate_evaluation(root: Path) -> dict:
