@@ -19,6 +19,7 @@ class MergeAccountingTests(unittest.TestCase):
             "merge_boundary_rejections": '[{"chunk_position":0,"rejected_tokens":1,"rejected_token_chars":1}]',
             "merge_boundary_rejection_detail": '[{"side":"after_seam_from_left_chunk","distance_bucket":"lt_100ms","rejected_tokens":2,"rejected_token_chars":2}]',
             "merge_boundary_rejection_correspondence": '[{"side":"after_seam_from_left_chunk","distance_bucket":"lt_100ms","status":"unmatched_no_candidate","rejected_tokens":2,"rejected_token_chars":2}]',
+            "merge_boundary_rejection_candidate_multiplicity": '[{"threshold_ms":100,"side":"after_seam_from_left_chunk","distance_bucket":"lt_100ms","candidate_multiplicity":"0","rejected_tokens":2,"rejected_token_chars":2},{"threshold_ms":250,"side":"after_seam_from_left_chunk","distance_bucket":"lt_100ms","candidate_multiplicity":"0","rejected_tokens":2,"rejected_token_chars":2},{"threshold_ms":500,"side":"after_seam_from_left_chunk","distance_bucket":"lt_100ms","candidate_multiplicity":"0","rejected_tokens":2,"rejected_token_chars":2}]',
             "merge_boundary_rejection_sensitivity": '[{"threshold_ms":100,"side":"after_seam_from_left_chunk","distance_bucket":"lt_100ms","status":"unmatched_no_candidate","rejected_tokens":2,"rejected_token_chars":2},{"threshold_ms":250,"side":"after_seam_from_left_chunk","distance_bucket":"lt_100ms","status":"unmatched_no_candidate","rejected_tokens":2,"rejected_token_chars":2},{"threshold_ms":500,"side":"after_seam_from_left_chunk","distance_bucket":"lt_100ms","status":"unmatched_no_candidate","rejected_tokens":2,"rejected_token_chars":2}]',
         }
         value.update(overrides)
@@ -29,7 +30,7 @@ class MergeAccountingTests(unittest.TestCase):
             "input_tokens": 7, "keep_tokens": 4, "reject_tokens": 3,
             "fallback_tokens": 0, "unaccounted_tokens": 0,
             "input_token_chars": 12, "keep_token_chars": 7,
-            "reject_token_chars": 5, "boundary_rejections": [], "boundary_rejection_detail": [], "boundary_rejection_correspondence": [], "boundary_rejection_sensitivity": [],
+            "reject_token_chars": 5, "boundary_rejections": [], "boundary_rejection_detail": [], "boundary_rejection_correspondence": [], "boundary_rejection_sensitivity": [], "boundary_rejection_candidate_multiplicity": [],
         })
         self.assertEqual(fields["merge_input_token_chars"], 12)
         self.assertEqual(fields["merge_keep_token_chars"], 7)
@@ -174,6 +175,20 @@ class MergeAccountingTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "does not reconcile"):
             _merge_accounting_diagnostics([self.row(merge_boundary_rejection_correspondence="[]")])
 
+
+    def test_candidate_multiplicity_aggregates_and_reconciles_each_threshold(self):
+        row = self.row()
+        result = _merge_accounting_diagnostics([row])["merge_accounting"]
+        key = "100|after_seam_from_left_chunk|lt_100ms|0"
+        self.assertEqual(result["boundary_rejection_candidate_multiplicity"][key]["rejected_tokens"], 2)
+        with self.assertRaisesRegex(ValueError, "candidate multiplicity does not reconcile"):
+            _merge_accounting_diagnostics([self.row(merge_boundary_rejection_candidate_multiplicity="[]")])
+
+    def test_candidate_multiplicity_rejects_unknown_bucket(self):
+        raw = '[{"threshold_ms":100,"side":"after_seam_from_left_chunk","distance_bucket":"lt_100ms","candidate_multiplicity":"many","rejected_tokens":2,"rejected_token_chars":2}]'
+        with self.assertRaisesRegex(ValueError, "bucket is invalid"):
+            _merge_accounting_diagnostics([self.row(merge_boundary_rejection_candidate_multiplicity=raw)])
+
     def test_sanitizer_keeps_only_aggregate_accounting(self):
         source = {"modes": {"overlap_2s": {
             "audio_duration_seconds": {"min": 1.0, "median": 2.0, "max": 3.0},
@@ -192,6 +207,8 @@ class MergeAccountingTests(unittest.TestCase):
                     "after_seam_from_left_chunk|lt_100ms": {"rejected_tokens": 1, "rejected_token_chars": 1, "token_text": "PRIVATE_TOKEN_SENTINEL", "case_id": "PRIVATE_CASE_SENTINEL"}},
                 "boundary_rejection_correspondence": {
                     "after_seam_from_left_chunk|lt_100ms|matched_unique": {"rejected_tokens": 1, "rejected_token_chars": 1}},
+                "boundary_rejection_candidate_multiplicity": {
+                    "100|after_seam_from_left_chunk|lt_100ms|0": {"rejected_tokens": 1, "rejected_token_chars": 1, "token_text": "PRIVATE_TOKEN_SENTINEL", "case_id": "PRIVATE_CASE_SENTINEL"}},
                 "private_case_id": "MUST_NOT_LEAK"}}}}
         clean = sanitize_execution_diagnostics(source)
         rendered = str(clean)
@@ -203,6 +220,8 @@ class MergeAccountingTests(unittest.TestCase):
         self.assertIn("after_seam_from_left_chunk|lt_100ms", rendered)
         self.assertIn("boundary_rejection_correspondence", rendered)
         self.assertIn("matched_unique", rendered)
+        self.assertIn("boundary_rejection_candidate_multiplicity", rendered)
+        self.assertNotIn("token_text", rendered)
 
 
 if __name__ == "__main__":

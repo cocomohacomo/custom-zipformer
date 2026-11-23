@@ -184,6 +184,7 @@ def _merge_accounting_diagnostics(rows: list[dict[str, str]]) -> dict:
     boundary_detail: dict[str, dict[str, int]] = {}
     correspondence_detail: dict[str, dict[str, int]] = {}
     sensitivity_detail: dict[str, dict[str, int]] = {}
+    candidate_multiplicity_detail: dict[str, dict[str, int]] = {}
     for row in rows:
         method = row.get("overlap_merge_method")
         if method not in methods:
@@ -299,9 +300,45 @@ def _merge_accounting_diagnostics(rows: list[dict[str, str]]) -> dict:
             sensitivity_totals[threshold][0] += count; sensitivity_totals[threshold][1] += chars
         if method == "timestamp" and any(sensitivity_totals[x] != [values["reject_tokens"], values["reject_token_chars"]] for x in (100, 250, 500)):
             raise ValueError("boundary sensitivity does not reconcile with rejected tokens")
+        try:
+            multiplicity = json.loads(row.get("merge_boundary_rejection_candidate_multiplicity", ""))
+        except (TypeError, json.JSONDecodeError) as exc:
+            raise ValueError("merge boundary candidate multiplicity diagnostics are invalid") from exc
+        if not isinstance(multiplicity, list):
+            raise ValueError("merge boundary candidate multiplicity diagnostics must be a list")
+        multiplicity_totals = {100: [0, 0], 250: [0, 0], 500: [0, 0]}
+        for item in multiplicity:
+            if not isinstance(item, dict):
+                raise ValueError("merge boundary candidate multiplicity record is invalid")
+            threshold, side = item.get("threshold_ms"), item.get("side")
+            distance, bucket = item.get("distance_bucket"), item.get("candidate_multiplicity")
+            count, chars = item.get("rejected_tokens"), item.get("rejected_token_chars")
+            if threshold not in (100, 250, 500):
+                raise ValueError("merge boundary candidate multiplicity threshold is invalid")
+            if side not in ("after_seam_from_left_chunk", "before_seam_from_right_chunk"):
+                raise ValueError("merge boundary candidate multiplicity side is invalid")
+            if distance not in ("lt_100ms", "100_250ms", "250_500ms", "gte_500ms"):
+                raise ValueError("merge boundary candidate multiplicity distance is invalid")
+            if bucket not in ("0", "1", "2_plus"):
+                raise ValueError("merge boundary candidate multiplicity bucket is invalid")
+            if any(isinstance(x, bool) or not isinstance(x, int) or x < 0 for x in (count, chars)):
+                raise ValueError("merge boundary candidate multiplicity counts are invalid")
+            key = str(threshold) + "|" + side + "|" + distance + "|" + bucket
+            aggregate = candidate_multiplicity_detail.setdefault(key, {"rejected_tokens": 0, "rejected_token_chars": 0})
+            aggregate["rejected_tokens"] += count
+            aggregate["rejected_token_chars"] += chars
+            multiplicity_totals[threshold][0] += count
+            multiplicity_totals[threshold][1] += chars
+        if method == "timestamp" and any(
+            multiplicity_totals[x] != [values["reject_tokens"], values["reject_token_chars"]]
+            for x in (100, 250, 500)
+        ):
+            raise ValueError("candidate multiplicity does not reconcile with rejected tokens")
+        if method == "text_fallback" and multiplicity:
+            raise ValueError("fallback rows must not contain candidate multiplicity diagnostics")
     if totals["input_tokens"] != totals["keep_tokens"] + totals["reject_tokens"] + totals["fallback_tokens"]:
         raise ValueError("aggregate merge token accounting is inconsistent")
-    return {"merge_accounting": {**totals, "timestamp_cases": methods["timestamp"], "fallback_cases": methods["text_fallback"], "unaccounted_tokens": 0, "accounting_consistent": True, "boundary_rejections_by_chunk": boundaries, "boundary_rejections_by_side_and_distance": boundary_detail, "boundary_rejection_correspondence": correspondence_detail, "boundary_rejection_sensitivity": sensitivity_detail}}
+    return {"merge_accounting": {**totals, "timestamp_cases": methods["timestamp"], "fallback_cases": methods["text_fallback"], "unaccounted_tokens": 0, "accounting_consistent": True, "boundary_rejections_by_chunk": boundaries, "boundary_rejections_by_side_and_distance": boundary_detail, "boundary_rejection_correspondence": correspondence_detail, "boundary_rejection_sensitivity": sensitivity_detail, "boundary_rejection_candidate_multiplicity": candidate_multiplicity_detail}}
 
 
 def validate_evaluation(root: Path) -> dict:

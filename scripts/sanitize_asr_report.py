@@ -250,6 +250,23 @@ def sanitize_execution_diagnostics(report: dict) -> dict:
                             tokens = _number(value.get("rejected_tokens"), integer=True, nonnegative=True); chars = _number(value.get("rejected_token_chars"), integer=True, nonnegative=True)
                             if tokens is not None and chars is not None: clean_sensitivity[key] = {"rejected_tokens": tokens, "rejected_token_chars": chars}
                 clean["merge_accounting"]["boundary_rejection_sensitivity"] = clean_sensitivity
+                raw_multiplicity = accounting.get("boundary_rejection_candidate_multiplicity")
+                clean_multiplicity = {}
+                allowed_multiplicity_keys = {
+                    str(threshold) + "|" + side + "|" + distance + "|" + bucket
+                    for threshold in (100, 250, 500)
+                    for side in ("after_seam_from_left_chunk", "before_seam_from_right_chunk")
+                    for distance in ("lt_100ms", "100_250ms", "250_500ms", "gte_500ms")
+                    for bucket in ("0", "1", "2_plus")
+                }
+                if isinstance(raw_multiplicity, dict):
+                    for key, value in sorted(raw_multiplicity.items()):
+                        if key in allowed_multiplicity_keys and isinstance(value, dict):
+                            tokens = _number(value.get("rejected_tokens"), integer=True, nonnegative=True)
+                            chars = _number(value.get("rejected_token_chars"), integer=True, nonnegative=True)
+                            if tokens is not None and chars is not None:
+                                clean_multiplicity[key] = {"rejected_tokens": tokens, "rejected_token_chars": chars}
+                clean["merge_accounting"]["boundary_rejection_candidate_multiplicity"] = clean_multiplicity
         output[mode] = clean
     return output
 
