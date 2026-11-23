@@ -4,7 +4,11 @@ from __future__ import annotations
 import math
 import numpy as np
 
-from scripts.reject_rescue_simulation import simulate_reject_rescue
+try:
+    from scripts.reject_rescue_simulation import simulate_reject_rescue
+except ModuleNotFoundError:
+    # Support direct execution of scripts/run_sherpa_zipformer.py.
+    from reject_rescue_simulation import simulate_reject_rescue
 
 
 def split_at_low_energy(
