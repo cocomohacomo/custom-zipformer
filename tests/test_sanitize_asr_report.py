@@ -352,7 +352,12 @@ class SanitizeAsrReportTests(unittest.TestCase):
 
 
     def test_reject_rescue_shadow_sanitizer_keeps_only_valid_aggregate_thresholds(self):
-        raw = {"merge_accounting": {"reject_rescue_shadow": {
+        raw = {"merge_accounting": {
+            "input_tokens": 5, "keep_tokens": 1, "reject_tokens": 4, "fallback_tokens": 0,
+            "input_token_chars": 5, "keep_token_chars": 1, "reject_token_chars": 4,
+            "timestamp_cases": 1, "fallback_cases": 0, "unaccounted_tokens": 0,
+            "accounting_consistent": True, "boundary_rejections_by_chunk": {},
+            "reject_rescue_shadow": {
             "100": {"rejected_tokens": 4, "rescued_tokens": 1, "rescued_token_chars": 2,
                     "not_rescued_tokens": 3, "classification": {"rescued_unique": 1,
                     "no_candidate": 2, "ambiguous": 1, "candidate_collision": 0},
