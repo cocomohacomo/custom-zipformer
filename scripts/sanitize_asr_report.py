@@ -288,22 +288,22 @@ def sanitize_execution_diagnostics(report: dict) -> dict:
                         item = raw_rescue.get(threshold)
                         if not isinstance(item, dict):
                             continue
-                        classification = item.get("classification")
                         names = ("rescued_unique", "no_candidate", "ambiguous", "candidate_collision")
                         values = [_number(item.get(key), integer=True, nonnegative=True) for key in
                                   ("rejected_tokens", "rescued_tokens", "rescued_token_chars", "not_rescued_tokens")]
-                        counts = [_number(classification.get(key), integer=True, nonnegative=True)
-                                  for key in names] if isinstance(classification, dict) else []
-                        if (all(value is not None for value in values) and len(counts) == 4
+                        # The validator emits flattened aggregate counters. Accept only that
+                        # canonical shape; row-level nested classifications are validated
+                        # before aggregation and must not be mistaken for report aggregates.
+                        counts = [_number(item.get(key), integer=True, nonnegative=True) for key in names]
+                        if (all(value is not None for value in values)
                                 and all(value is not None for value in counts)
-                                and item.get("accounting_ok") is True
                                 and values[1] + values[3] == values[0]
                                 and sum(counts) == values[0]
                                 and counts[0] == values[1]):
                             clean_rescue[threshold] = {
                                 "rejected_tokens": values[0], "rescued_tokens": values[1],
                                 "rescued_token_chars": values[2], "not_rescued_tokens": values[3],
-                                "classification": dict(zip(names, counts)), "accounting_ok": True,
+                                **dict(zip(names, counts)),
                             }
                 clean["merge_accounting"]["reject_rescue_shadow"] = clean_rescue
         output[mode] = clean
