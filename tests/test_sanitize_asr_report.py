@@ -364,15 +364,16 @@ class SanitizeAsrReportTests(unittest.TestCase):
             "accounting_consistent": True, "boundary_rejections_by_chunk": {},
             "reject_rescue_shadow": {
             "100": {"rejected_tokens": 4, "rescued_tokens": 1, "rescued_token_chars": 2,
-                    "not_rescued_tokens": 3, "classification": {"rescued_unique": 1,
-                    "no_candidate": 2, "ambiguous": 1, "candidate_collision": 0},
-                    "accounting_ok": True, "private_ids": ["SECRET"]},
+                    "not_rescued_tokens": 3, "rescued_unique": 1, "no_candidate": 2,
+                    "ambiguous": 1, "candidate_collision": 0, "private_ids": ["SECRET"]},
             "250": {"rejected_tokens": 4, "rescued_tokens": -1},
             "private": {"transcript": "SECRET"},
         }}}
         clean = sanitize_execution_diagnostics({"modes": {"overlap_2s": raw}})
         rendered = json.dumps(clean)
         self.assertIn("100", rendered)
+        self.assertEqual(clean["overlap_2s"]["merge_accounting"]["reject_rescue_shadow"]["100"]["rescued_tokens"], 1)
+        self.assertEqual(clean["overlap_2s"]["merge_accounting"]["reject_rescue_shadow"]["100"]["rescued_unique"], 1)
         self.assertNotIn("SECRET", rendered)
         self.assertNotIn("private_ids", rendered)
         self.assertNotIn('"250"', rendered)
