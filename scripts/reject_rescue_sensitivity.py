@@ -116,3 +116,51 @@ def counterfactual_rescue_cer(reference, kept_tokens, rejected_tokens, threshold
             },
         }
     return result
+
+
+def compare_baseline_and_gate(existing_hypothesis, kept_tokens, rejected_tokens):
+    """Reconstruct the Keep-only baseline and gate CER analysis on exact match.
+
+    Returns only aggregate diagnostics. The reconstructed text is never returned.
+    """
+    if not isinstance(existing_hypothesis, str):
+        raise ValueError("existing_hypothesis must be a string")
+    kept = list(kept_tokens)
+    rejected = list(rejected_tokens)
+    reconstructed = "".join(
+        item["text"] for item in sorted(kept, key=lambda x: (x["time"], x["token_id"]))
+    ).strip()
+    matched = reconstructed == existing_hypothesis
+    mismatch_reason = None
+    if not matched:
+        raw = "".join(item["text"] for item in sorted(kept, key=lambda x: (x["time"], x["token_id"])))
+        if raw.strip() == existing_hypothesis and raw != reconstructed:
+            mismatch_reason = "edge_whitespace"
+        elif sorted(reconstructed) == sorted(existing_hypothesis):
+            mismatch_reason = "character_order"
+        elif len(reconstructed) != len(existing_hypothesis):
+            mismatch_reason = "character_count"
+        else:
+            mismatch_reason = "content_or_order"
+    return {
+        "baseline_match": matched,
+        "mismatch_reason": mismatch_reason,
+        "baseline_chars": len(existing_hypothesis),
+        "reconstructed_chars": len(reconstructed),
+        "rejected_tokens": len(rejected),
+    }
+
+
+def gated_counterfactual_rescue_cer(reference, existing_hypothesis, kept_tokens, rejected_tokens, thresholds_ms=(100, 250, 500)):
+    """Only calculate counterfactual CER when reconstructed baseline exactly matches.
+
+
+    Mismatch results intentionally contain diagnostics only and no CER values.
+    """
+    gate = compare_baseline_and_gate(existing_hypothesis, kept_tokens, rejected_tokens)
+    if not gate["baseline_match"]:
+        return {"gate": gate, "cer_comparison_status": "stopped_baseline_mismatch"}
+    result = counterfactual_rescue_cer(reference, kept_tokens, rejected_tokens, thresholds_ms)
+    # The exact existing hypothesis is the accepted baseline for comparison.
+    result["baseline"] = _metrics(reference, existing_hypothesis)
+    return {"gate": gate, "cer_comparison_status": "baseline_verified", "cer": result}
