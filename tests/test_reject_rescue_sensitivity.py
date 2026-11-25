@@ -55,3 +55,29 @@ class CounterfactualRescueCerTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class BaselineGateTests(unittest.TestCase):
+    def test_exact_match_allows_cer(self):
+        from scripts.reject_rescue_sensitivity import gated_counterfactual_rescue_cer
+        kept = [{"token_id":"k1","time":0.0,"text":"日本"}]
+        rejected = [{"token_id":"r1","time":1.0,"text":"語","candidates":{100:[],250:[],500:[]}}]
+        result = gated_counterfactual_rescue_cer("日本語","日本",kept,rejected)
+        self.assertEqual(result["cer_comparison_status"],"baseline_verified")
+        self.assertIn("baseline",result["cer"])
+
+    def test_mismatch_stops_cer_and_classifies(self):
+        from scripts.reject_rescue_sensitivity import gated_counterfactual_rescue_cer
+        kept = [{"token_id":"k1","time":0.0,"text":"abc"}]
+        rejected = []
+        result = gated_counterfactual_rescue_cer("abc","abd",kept,rejected)
+        self.assertEqual(result["cer_comparison_status"],"stopped_baseline_mismatch")
+        self.assertNotIn("cer",result)
+        self.assertEqual(result["gate"]["mismatch_reason"],"content_or_order")
+
+    def test_edge_whitespace_mismatch_classified(self):
+        from scripts.reject_rescue_sensitivity import compare_baseline_and_gate
+        kept = [{"token_id":"k1","time":0.0,"text":" x "}]
+        result = compare_baseline_and_gate("x",kept,[])
+        self.assertTrue(result["baseline_match"])
+
